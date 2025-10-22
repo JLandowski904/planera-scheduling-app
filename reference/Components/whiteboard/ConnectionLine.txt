@@ -1,0 +1,80 @@
+import React from "react";
+import { Button } from "@/components/ui/button";
+import { Trash2, Settings } from "lucide-react";
+
+export default function ConnectionLine({ from, to, isBlocked, onEdit, onDelete, edgeId }) {
+  if (!from || !to) return null;
+
+  const fromX = from.x + (from.width || 192) / 2;
+  const fromY = from.y + (from.height || 120) / 2;
+  const toX = to.x + (to.width || 192) / 2;
+  const toY = to.y + (to.height || 120) / 2;
+
+  const midX = (fromX + toX) / 2;
+  const midY = (fromY + toY) / 2;
+
+  const path = `M ${fromX} ${fromY} Q ${midX} ${midY - 50} ${toX} ${toY}`;
+
+  return (
+    <g className="group">
+      {/* Invisible wider path for easier clicking */}
+      <path
+        d={path}
+        fill="none"
+        stroke="transparent"
+        strokeWidth="20"
+        className="cursor-pointer"
+      />
+      
+      {/* Visible path */}
+      <path
+        d={path}
+        fill="none"
+        stroke={isBlocked ? "#ef4444" : "#94a3b8"}
+        strokeWidth="2"
+        strokeDasharray={isBlocked ? "5,5" : "0"}
+        className="transition-all duration-200 pointer-events-none"
+      />
+      
+      {/* Arrow head */}
+      <circle
+        cx={toX}
+        cy={toY}
+        r="4"
+        fill={isBlocked ? "#ef4444" : "#94a3b8"}
+        className="pointer-events-none"
+      />
+
+      {/* Edit and Delete buttons on hover */}
+      <g className="opacity-0 group-hover:opacity-100 transition-opacity">
+        <foreignObject
+          x={midX - 35}
+          y={midY - 65}
+          width="70"
+          height="30"
+        >
+          <div className="flex items-center justify-center gap-1">
+            <button
+              className="w-7 h-7 bg-slate-700 hover:bg-slate-800 rounded-full flex items-center justify-center shadow-lg transition-colors"
+              onClick={(e) => {
+                e.stopPropagation();
+                if (onEdit) onEdit();
+              }}
+            >
+              <Settings className="w-3.5 h-3.5 text-white" />
+            </button>
+            <button
+              className="w-7 h-7 bg-red-500 hover:bg-red-600 rounded-full flex items-center justify-center shadow-lg transition-colors"
+              onClick={(e) => {
+                e.stopPropagation();
+                if (onDelete) onDelete();
+              }}
+            >
+              <Trash2 className="w-3.5 h-3.5 text-white" />
+            </button>
+          </div>
+        </foreignObject>
+      </g>
+    </g>
+  );
+}

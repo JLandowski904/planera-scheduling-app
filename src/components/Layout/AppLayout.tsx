@@ -1,0 +1,37 @@
+import React from 'react';
+import AppSidebar from './AppSidebar';
+import AppHeader from './AppHeader';
+import { ViewType } from '../../types';
+
+interface AppLayoutProps {
+  children: React.ReactNode;
+  currentView: ViewType;
+  onViewChange: (view: ViewType) => void;
+}
+
+const AppLayout: React.FC<AppLayoutProps> = ({ children, currentView, onViewChange }) => {
+  return (
+    <div className="min-h-screen flex w-full bg-slate-50">
+      <AppSidebar currentView={currentView} onViewChange={onViewChange} />
+      
+      <main className="flex-1 flex flex-col overflow-hidden">
+        <AppHeader currentView={currentView} />
+        
+        <div className="flex-1 overflow-auto bg-slate-50">
+          {children}
+        </div>
+      </main>
+    </div>
+  );
+};
+
+export default AppLayout;
+
+
+
+
+
+
+
+
+

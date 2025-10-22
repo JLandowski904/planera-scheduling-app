@@ -1,0 +1,1381 @@
+
+import React, { useState, useEffect, useRef } from "react";
+import { base44 } from "@/api/base44Client";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Plus,
+  Diamond,
+  Package,
+  CheckSquare,
+  User,
+  ZoomIn,
+  ZoomOut,
+  Move,
+  Link as LinkIcon,
+  Save,
+  Trash2,
+  Pencil, // Added Pencil icon for editing phases
+} from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import NodeComponent from "../components/whiteboard/NodeComponent";
+import ConnectionLine from "../components/whiteboard/ConnectionLine";
+import { format, addDays, differenceInDays, parseISO } from "date-fns";
+
+export default function Whiteboard() {
+  const [selectedProject, setSelectedProject] = useState(null);
+  const [showNodeDialog, setShowNodeDialog] = useState(false);
+  const [showEdgeDialog, setShowEdgeDialog] = useState(false);
+  const [editingNode, setEditingNode] = useState(null);
+  const [editingEdge, setEditingEdge] = useState(null);
+  const [nodeType, setNodeType] = useState("task");
+  const [selectedNodes, setSelectedNodes] = useState([]);
+  const [draggedNode, setDraggedNode] = useState(null);
+  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
+  const [tempPositions, setTempPositions] = useState({});
+  const [viewOffset, setViewOffset] = useState({ x: 0, y: 0 });
+  const [zoom, setZoom] = useState(1);
+  const [isPanning, setIsPanning] = useState(false);
+  const [panStart, setPanStart] = useState({ x: 0, y: 0 });
+  const [linkMode, setLinkMode] = useState(false);
+  const [linkFrom, setLinkFrom] = useState(null);
+  const [resizingPhase, setResizingPhase] = useState(null);
+  const [resizeHandle, setResizeHandle] = useState(null);
+  const [resizeStart, setResizeStart] = useState({ x: 0, y: 0, width: 0, height: 0 });
+  const canvasRef = useRef(null);
+
+  const [nodeData, setNodeData] = useState({
+    title: "",
+    start_date: format(new Date(), "yyyy-MM-dd"),
+    due_date: format(addDays(new Date(), 7), "yyyy-MM-dd"), // Reverted to addDays for consistency
+    duration_days: 7,
+    status: "not_started",
+    priority: "medium",
+    discipline: "civil",
+    percent_complete: 0,
+    notes: "",
+    tags: [],
+    position_x: 400,
+    position_y: 300,
+    predecessor_id: null,
+    dependency_type: "finish_to_start",
+    phase_id: null, // Added new field
+    width: 400,    // Added new field
+    height: 300,   // Added new field
+  });
+
+  const queryClient = useQueryClient();
+
+  const urlParams = new URLSearchParams(window.location.search);
+  const projectId = urlParams.get("project");
+
+  const { data: projects = [] } = useQuery({
+    queryKey: ['projects'],
+    queryFn: () => base44.entities.Project.list("-created_date"),
+  });
+
+  const { data: nodes = [] } = useQuery({
+    queryKey: ['nodes', selectedProject],
+    queryFn: () => base44.entities.Node.filter({ project_id: selectedProject }),
+    enabled: !!selectedProject,
+  });
+
+  const { data: edges = [] } = useQuery({
+    queryKey: ['edges', selectedProject],
+    queryFn: () => base44.entities.Edge.filter({ project_id: selectedProject }),
+    enabled: !!selectedProject,
+  });
+
+  useEffect(() => {
+    if (projectId && projects.length > 0) {
+      setSelectedProject(projectId);
+    } else if (projects.length > 0 && !selectedProject) {
+      setSelectedProject(projects[0].id);
+    }
+  }, [projectId, projects, selectedProject]);
+
+  const createNodeMutation = useMutation({
+    mutationFn: (data) => base44.entities.Node.create(data),
+    onSuccess: async (newNode, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['nodes'] });
+      
+      // Create edge if predecessor was selected
+      if (variables.predecessor_id) {
+        await createEdgeMutation.mutateAsync({ // Use mutateAsync for sequential operation
+          project_id: selectedProject,
+          from_node_id: variables.predecessor_id,
+          to_node_id: newNode.id,
+          dependency_type: variables.dependency_type || "finish_to_start"
+        });
+      }
+      
+      setShowNodeDialog(false);
+      setEditingNode(null);
+      resetNodeData();
+    },
+  });
+
+  const updateNodeMutation = useMutation({
+    mutationFn: ({ id, data }) => base44.entities.Node.update(id, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['nodes'] });
+    },
+  });
+
+  const deleteNodeMutation = useMutation({
+    mutationFn: (id) => base44.entities.Node.delete(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['nodes'] });
+      setShowNodeDialog(false);
+      setEditingNode(null);
+    },
+  });
+
+  // Mutation for programmatic edge creation (e.g., from predecessor selection)
+  const createEdgeMutation = useMutation({
+    mutationFn: (data) => base44.entities.Edge.create(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['edges'] });
+    },
+  });
+
+  // Mutation for manual edge creation via UI (to also reset link mode)
+  const createManualEdgeMutation = useMutation({
+    mutationFn: (data) => base44.entities.Edge.create(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['edges'] });
+      setLinkMode(false);
+      setLinkFrom(null);
+    },
+  });
+
+  const updateEdgeMutation = useMutation({
+    mutationFn: ({ id, data }) => base44.entities.Edge.update(id, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['edges'] });
+      setShowEdgeDialog(false);
+      setEditingEdge(null);
+    },
+  });
+
+  const deleteEdgeMutation = useMutation({
+    mutationFn: (id) => base44.entities.Edge.delete(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['edges'] });
+    },
+  });
+
+  const propagateDateChanges = async (nodeId, oldDueDate, newDueDate) => {
+    const daysDifference = differenceInDays(parseISO(newDueDate), parseISO(oldDueDate));
+    
+    if (daysDifference === 0) return;
+
+    const dependentEdges = edges.filter(edge => edge.from_node_id === nodeId);
+    
+    for (const edge of dependentEdges) {
+      const dependentNode = nodes.find(n => n.id === edge.to_node_id);
+      if (!dependentNode) continue;
+
+      // Current values of the dependent node (before update)
+      const currentDependentStartDate = dependentNode.start_date ? parseISO(dependentNode.start_date) : parseISO(newDueDate);
+      const currentDependentDueDate = dependentNode.due_date ? parseISO(dependentNode.due_date) : parseISO(newDueDate);
+      const duration = dependentNode.start_date && dependentNode.due_date ? differenceInDays(currentDependentDueDate, currentDependentStartDate) : 0;
+
+      let newStartDate = currentDependentStartDate; // Default to current
+      let newDueDateForDependent = currentDependentDueDate; // Default to current
+
+      if (edge.dependency_type === "finish_to_start") {
+        newStartDate = addDays(parseISO(newDueDate), 1);
+        newDueDateForDependent = addDays(newStartDate, duration);
+      } else if (edge.dependency_type === "start_to_start") {
+        // To accurately propagate SS, we need the predecessor's NEW start date.
+        // Assuming predecessor's duration is constant for simplicity in propagation.
+        const predecessorOldStart = nodes.find(n => n.id === edge.from_node_id)?.start_date;
+        if (predecessorOldStart) {
+          const oldPredecessorDuration = differenceInDays(parseISO(oldDueDate), parseISO(predecessorOldStart));
+          const newPredecessorStartDate = addDays(parseISO(newDueDate), -oldPredecessorDuration);
+          newStartDate = newPredecessorStartDate;
+          newDueDateForDependent = addDays(newStartDate, duration);
+        } else {
+          // Fallback if predecessor old start date is unknown, treat as FS with 1 day lag
+          newStartDate = addDays(parseISO(newDueDate), 1);
+          newDueDateForDependent = addDays(newStartDate, duration);
+        }
+      } else if (edge.dependency_type === "finish_to_finish") {
+        newDueDateForDependent = parseISO(newDueDate);
+        newStartDate = addDays(newDueDateForDependent, -duration);
+      }
+      
+      const formattedNewStartDate = format(newStartDate, "yyyy-MM-dd");
+      const formattedNewDueDateForDependent = format(newDueDateForDependent, "yyyy-MM-dd");
+      const newDurationDays = differenceInDays(parseISO(formattedNewDueDateForDependent), parseISO(formattedNewStartDate));
+
+      await updateNodeMutation.mutateAsync({
+        id: dependentNode.id,
+        data: {
+          start_date: formattedNewStartDate,
+          due_date: formattedNewDueDateForDependent,
+          duration_days: newDurationDays,
+        }
+      });
+
+      // Recursively propagate changes using the newly calculated due date of the dependent
+      await propagateDateChanges(dependentNode.id, dependentNode.due_date, formattedNewDueDateForDependent);
+    }
+  };
+
+  const resetNodeData = () => {
+    setNodeData({
+      title: "",
+      start_date: format(new Date(), "yyyy-MM-dd"),
+      due_date: format(addDays(new Date(), 7), "yyyy-MM-dd"), // Reverted to addDays
+      duration_days: 7,
+      status: "not_started",
+      priority: "medium",
+      discipline: "civil",
+      percent_complete: 0,
+      notes: "",
+      tags: [],
+      position_x: 400,
+      position_y: 300,
+      predecessor_id: null,
+      dependency_type: "finish_to_start",
+      phase_id: null, // Reset new field
+      width: 400,    // Reset new field
+      height: 300,   // Reset new field
+    });
+  };
+
+  const handleCreateNode = (type) => {
+    setNodeType(type);
+    setEditingNode(null);
+    resetNodeData();
+    setShowNodeDialog(true);
+  };
+
+  const handleEditNode = (node) => {
+    setEditingNode(node);
+    setNodeType(node.type);
+    const duration = node.start_date && node.due_date 
+      ? differenceInDays(parseISO(node.due_date), parseISO(node.start_date))
+      : 7; // Calculate duration
+    setNodeData({
+      title: node.title || "",
+      start_date: node.start_date || format(new Date(), "yyyy-MM-dd"),
+      due_date: node.due_date || format(addDays(new Date(), 7), "yyyy-MM-dd"),
+      duration_days: duration, // Set duration_days
+      status: node.status || "not_started",
+      priority: node.priority || "medium",
+      discipline: node.discipline || "civil",
+      percent_complete: node.percent_complete || 0,
+      notes: node.notes || "",
+      tags: node.tags || [],
+      role: node.role || "",
+      position_x: node.position_x,
+      position_y: node.position_y,
+      predecessor_id: null, // Do not load predecessor info when editing (for now, this is creation-specific)
+      dependency_type: "finish_to_start", // Reset to default when editing
+      phase_id: node.phase_id || null, // Populate new field
+      width: node.width || 400,    // Populate new field
+      height: node.height || 300,   // Populate new field
+    });
+    setShowNodeDialog(true);
+  };
+
+  const handleEditEdge = (edge) => {
+    setEditingEdge(edge);
+    setShowEdgeDialog(true);
+  };
+
+  const handleSaveNode = async () => {
+    if (editingNode) {
+      const oldDueDate = editingNode.due_date;
+      const newDueDate = nodeData.due_date;
+      
+      // When editing, do not send predecessor_id or dependency_type as they are for initial creation
+      const { predecessor_id, dependency_type, ...dataToUpdate } = nodeData;
+      await updateNodeMutation.mutateAsync({
+        id: editingNode.id,
+        data: { ...dataToUpdate, type: nodeType }
+      });
+
+      if (oldDueDate !== newDueDate) {
+        await propagateDateChanges(editingNode.id, oldDueDate, newDueDate);
+      }
+    } else {
+      // When creating, include predecessor_id and dependency_type
+      const nodeToCreate = { 
+        ...nodeData, 
+        type: nodeType, 
+        project_id: selectedProject 
+      };
+      createNodeMutation.mutate(nodeToCreate);
+    }
+    setShowNodeDialog(false);
+    setEditingNode(null);
+  };
+
+  const handleSaveEdge = () => {
+    if (editingEdge) {
+      updateEdgeMutation.mutate({
+        id: editingEdge.id,
+        data: { dependency_type: editingEdge.dependency_type }
+      });
+    }
+  };
+
+  const handleDeleteNode = () => {
+    if (editingNode && confirm("Delete this item? This cannot be undone.")) {
+      deleteNodeMutation.mutate(editingNode.id);
+    }
+  };
+
+  const handleDeleteEdge = (edgeId) => {
+    if (confirm("Break this dependency link?")) {
+      deleteEdgeMutation.mutate(edgeId);
+    }
+  };
+
+  const handlePredecessorChange = (predecessorId) => {
+    if (!predecessorId || predecessorId === "none") {
+      // If no predecessor selected, reset dates to default
+      setNodeData(prev => ({
+        ...prev,
+        predecessor_id: null,
+        start_date: format(new Date(), "yyyy-MM-dd"),
+        due_date: format(addDays(new Date(), prev.duration_days || 7), "yyyy-MM-dd")
+      }));
+      return;
+    }
+
+    const predecessor = nodes.find(n => n.id === predecessorId);
+    if (!predecessor || !predecessor.due_date) { // Ensure predecessor and its due_date exist
+      console.warn("Selected predecessor not found or missing due_date/start_date.");
+      setNodeData(prev => ({ ...prev, predecessor_id: null })); // Clear invalid predecessor
+      return;
+    }
+
+    // Calculate dates based on predecessor and current dependency type
+    const calculateDates = (currentData) => {
+      const predecessorDueDate = parseISO(predecessor.due_date);
+      const predecessorStartDate = predecessor.start_date ? parseISO(predecessor.start_date) : predecessorDueDate; 
+      const duration = currentData.duration_days || 7;
+      let newStartDate;
+
+      if (currentData.dependency_type === "finish_to_start") {
+        newStartDate = addDays(predecessorDueDate, 1);
+      } else if (currentData.dependency_type === "start_to_start") {
+        newStartDate = predecessorStartDate;
+      } else if (currentData.dependency_type === "finish_to_finish") {
+        newStartDate = addDays(predecessorDueDate, -duration);
+      } else {
+        newStartDate = new Date(); // Fallback
+      }
+
+      const newDueDate = addDays(newStartDate, duration);
+      
+      return {
+        start_date: format(newStartDate, "yyyy-MM-dd"),
+        due_date: format(newDueDate, "yyyy-MM-dd")
+      };
+    };
+
+    setNodeData(prev => ({
+      ...prev,
+      predecessor_id: predecessorId,
+      ...calculateDates(prev)
+    }));
+  };
+
+  const handleDependencyTypeChange = (dependencyType) => {
+    setNodeData(prev => {
+      let updatedData = { ...prev, dependency_type: dependencyType };
+
+      // Recalculate dates if predecessor is selected
+      if (prev.predecessor_id) {
+        const predecessor = nodes.find(n => n.id === prev.predecessor_id);
+        if (predecessor && predecessor.due_date) {
+          const predecessorDueDate = parseISO(predecessor.due_date);
+          const predecessorStartDate = predecessor.start_date ? parseISO(predecessor.start_date) : predecessorDueDate;
+          const duration = prev.duration_days || 7;
+          let newStartDate;
+
+          if (dependencyType === "finish_to_start") {
+            newStartDate = addDays(predecessorDueDate, 1);
+          } else if (dependencyType === "start_to_start") {
+            newStartDate = predecessorStartDate;
+          } else if (dependencyType === "finish_to_finish") {
+            newStartDate = addDays(predecessorDueDate, -duration);
+          } else {
+            newStartDate = new Date(); // Fallback
+          }
+
+          const newDueDate = addDays(newStartDate, duration);
+
+          updatedData = {
+            ...updatedData,
+            start_date: format(newStartDate, "yyyy-MM-dd"),
+            due_date: format(newDueDate, "yyyy-MM-dd")
+          };
+        }
+      }
+      return updatedData;
+    });
+  };
+
+  const handleStartDateChange = (newStartDate) => {
+    setNodeData(prev => {
+      const duration = prev.duration_days || 7;
+      const newDueDate = format(addDays(parseISO(newStartDate), duration), "yyyy-MM-dd");
+      return { 
+        ...prev, 
+        start_date: newStartDate, 
+        due_date: newDueDate 
+      };
+    });
+  };
+
+  const handleDueDateChange = (newDueDate) => {
+    setNodeData(prev => {
+      const duration = differenceInDays(parseISO(newDueDate), parseISO(prev.start_date));
+      return { 
+        ...prev, 
+        due_date: newDueDate,
+        duration_days: Math.max(0, duration)
+      };
+    });
+  };
+
+  const handleDurationChange = (newDuration) => {
+    setNodeData(prev => {
+      const duration = parseInt(newDuration) || 0;
+      const newDueDate = format(addDays(parseISO(prev.start_date), duration), "yyyy-MM-dd");
+      return { 
+        ...prev, 
+        duration_days: duration,
+        due_date: newDueDate
+      };
+    });
+  };
+
+  const getNodePosition = (node) => {
+    if (tempPositions[node.id]) {
+      return { 
+        x: tempPositions[node.id].x, 
+        y: tempPositions[node.id].y 
+      };
+    }
+    return { x: node.position_x, y: node.position_y };
+  };
+
+  const getNodeDimensions = (node) => {
+    if (node.type === "phase") {
+      if (tempPositions[node.id]) {
+        return { 
+          width: tempPositions[node.id].width || node.width || 400, 
+          height: tempPositions[node.id].height || node.height || 300 
+        };
+      }
+      return { width: node.width || 400, height: node.height || 300 };
+    }
+    if (node.type === "milestone") return { width: 96, height: 96 };
+    if (node.type === "person") return { width: 80, height: 80 };
+    return { width: 192, height: 120 };
+  };
+
+  const checkNodeInPhase = (nodeX, nodeY, nodeWidth, nodeHeight) => {
+    const phases = nodes.filter(n => n.type === "phase");
+    
+    for (const phase of phases) {
+      const phasePos = getNodePosition(phase);
+      const phaseDims = getNodeDimensions(phase);
+      
+      // Check if node center is within phase boundaries
+      const nodeCenterX = nodeX + nodeWidth / 2;
+      const nodeCenterY = nodeY + nodeHeight / 2;
+      
+      if (
+        nodeCenterX >= phasePos.x &&
+        nodeCenterX <= phasePos.x + phaseDims.width &&
+        nodeCenterY >= phasePos.y &&
+        nodeCenterY <= phasePos.y + phaseDims.height
+      ) {
+        return phase.id;
+      }
+    }
+    
+    return null;
+  };
+
+  const handlePhaseResizeStart = (e, phaseId, handle) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    const phase = nodes.find(n => n.id === phaseId);
+    if (!phase) return;
+    
+    const pos = getNodePosition(phase);
+    const dims = getNodeDimensions(phase);
+    
+    setResizingPhase(phaseId);
+    setResizeHandle(handle);
+    setResizeStart({
+      x: pos.x,
+      y: pos.y,
+      width: dims.width,
+      height: dims.height
+    });
+  };
+
+  const handleNodeMouseDown = (e, nodeId) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    if (linkMode) {
+      if (!linkFrom) {
+        setLinkFrom(nodeId);
+      } else if (linkFrom !== nodeId) {
+        createManualEdgeMutation.mutate({
+          project_id: selectedProject,
+          from_node_id: linkFrom,
+          to_node_id: nodeId,
+          dependency_type: "finish_to_start"
+        });
+      }
+      return;
+    }
+
+    const node = nodes.find(n => n.id === nodeId);
+    if (!node) return;
+
+    const rect = canvasRef.current.getBoundingClientRect();
+    const clickX = (e.clientX - rect.left - viewOffset.x) / zoom;
+    const clickY = (e.clientY - rect.top - viewOffset.y) / zoom;
+
+    setDraggedNode(nodeId);
+    setDragOffset({
+      x: clickX - node.position_x,
+      y: clickY - node.position_y
+    });
+    
+    if (!selectedNodes.includes(nodeId)) {
+      setSelectedNodes([nodeId]);
+    }
+  };
+
+  const handleMouseMove = (e) => {
+    if (isPanning) {
+      setViewOffset({
+        x: e.clientX - panStart.x,
+        y: e.clientY - panStart.y
+      });
+      return;
+    }
+
+    const rect = canvasRef.current.getBoundingClientRect();
+    const mouseX = (e.clientX - rect.left - viewOffset.x) / zoom;
+    const mouseY = (e.clientY - rect.top - viewOffset.y) / zoom;
+
+    if (resizingPhase && resizeHandle) {
+      const phase = nodes.find(n => n.id === resizingPhase);
+      const currentPos = getNodePosition(phase); // Get current position including temp if present
+      const currentDims = getNodeDimensions(phase); // Get current dimensions including temp if present
+
+      const initialX = resizeStart.x;
+      const initialY = resizeStart.y;
+      const initialWidth = resizeStart.width;
+      const initialHeight = resizeStart.height;
+      
+      let newX = initialX;
+      let newY = initialY;
+      let newWidth = initialWidth;
+      let newHeight = initialHeight;
+
+      const minSize = 200; // Minimum width/height for a phase box
+      
+      if (resizeHandle.includes('e')) {
+        newWidth = Math.max(minSize, mouseX - initialX);
+      }
+      if (resizeHandle.includes('s')) {
+        newHeight = Math.max(minSize, mouseY - initialY);
+      }
+      if (resizeHandle.includes('w')) {
+        newX = Math.min(initialX + initialWidth - minSize, mouseX);
+        newWidth = Math.max(minSize, initialX + initialWidth - newX);
+      }
+      if (resizeHandle.includes('n')) {
+        newY = Math.min(initialY + initialHeight - minSize, mouseY);
+        newHeight = Math.max(minSize, initialY + initialHeight - newY);
+      }
+      
+      setTempPositions(prev => ({
+        ...prev,
+        [resizingPhase]: { 
+          x: newX, 
+          y: newY, 
+          width: newWidth, 
+          height: newHeight 
+        }
+      }));
+      return;
+    }
+
+    if (!draggedNode) return;
+
+    const newX = Math.max(0, mouseX - dragOffset.x);
+    const newY = Math.max(0, mouseY - dragOffset.y);
+
+    setTempPositions(prev => ({
+      ...prev,
+      [draggedNode]: { x: newX, y: newY }
+    }));
+  };
+
+  const handleMouseUp = async () => {
+    if (resizingPhase && tempPositions[resizingPhase]) {
+      const { x, y, width, height } = tempPositions[resizingPhase];
+      await updateNodeMutation.mutateAsync({
+        id: resizingPhase,
+        data: { 
+          position_x: x, 
+          position_y: y,
+          width: width,
+          height: height
+        }
+      });
+      
+      setTempPositions(prev => {
+        const newPositions = { ...prev };
+        delete newPositions[resizingPhase];
+        return newPositions;
+      });
+      
+      setResizingPhase(null);
+      setResizeHandle(null);
+    }
+    
+    if (draggedNode && tempPositions[draggedNode]) {
+      const { x, y } = tempPositions[draggedNode];
+      const draggedNodeData = nodes.find(n => n.id === draggedNode);
+      
+      if (draggedNodeData && draggedNodeData.type !== "phase") {
+        const nodeDims = getNodeDimensions(draggedNodeData);
+        const phaseId = checkNodeInPhase(x, y, nodeDims.width, nodeDims.height);
+        
+        await updateNodeMutation.mutateAsync({
+          id: draggedNode,
+          data: { 
+            position_x: x, 
+            position_y: y,
+            phase_id: phaseId
+          }
+        });
+      } else {
+        await updateNodeMutation.mutateAsync({
+          id: draggedNode,
+          data: { position_x: x, position_y: y }
+        });
+      }
+      
+      setTempPositions(prev => {
+        const newPositions = { ...prev };
+        delete newPositions[draggedNode];
+        return newPositions;
+      });
+    }
+    
+    setDraggedNode(null);
+    setIsPanning(false);
+  };
+
+  const handleCanvasMouseDown = (e) => {
+    if (e.target === canvasRef.current || e.target.tagName === 'svg') {
+      e.preventDefault();
+      setIsPanning(true);
+      setPanStart({
+        x: e.clientX - viewOffset.x,
+        y: e.clientY - viewOffset.y
+      });
+      setSelectedNodes([]);
+    }
+  };
+
+  const checkIfBlocked = (edge) => {
+    const fromNode = nodes.find(n => n.id === edge.from_node_id);
+    const toNode = nodes.find(n => n.id === edge.to_node_id);
+    
+    if (!fromNode || !toNode || !fromNode.due_date || !toNode.start_date) return false;
+
+    const fromDue = parseISO(fromNode.due_date);
+    const toStart = parseISO(toNode.start_date);
+
+    if (edge.dependency_type === "finish_to_start") {
+      return fromDue > toStart;
+    }
+    
+    return false;
+  };
+
+  const getEdgePositions = () => {
+    return edges.map(edge => {
+      const fromNode = nodes.find(n => n.id === edge.from_node_id);
+      const toNode = nodes.find(n => n.id === edge.to_node_id);
+      if (!fromNode || !toNode) return null;
+
+      const fromPos = getNodePosition(fromNode);
+      const toPos = getNodePosition(toNode);
+      const fromDims = getNodeDimensions(fromNode);
+      const toDims = getNodeDimensions(toNode);
+
+      return {
+        edgeId: edge.id,
+        from: {
+          x: fromPos.x,
+          y: fromPos.y,
+          width: fromDims.width,
+          height: fromDims.height
+        },
+        to: {
+          x: toPos.x,
+          y: toPos.y,
+          width: toDims.width,
+          height: toDims.height
+        },
+        isBlocked: checkIfBlocked(edge),
+        onEdit: () => handleEditEdge(edge),
+        onDelete: () => handleDeleteEdge(edge.id)
+      };
+    }).filter(Boolean);
+  };
+
+  // Get available phases
+  const availablePhases = nodes.filter(n => n.type === "phase");
+
+  // Get available predecessors (exclude person nodes, phase nodes, and current node if editing)
+  const availablePredecessors = nodes.filter(n => 
+    n.type !== "person" && n.type !== "phase" && 
+    (!editingNode || n.id !== editingNode.id) &&
+    n.due_date // Only nodes with a due_date can be predecessors for date-based dependencies
+  );
+
+  if (!selectedProject) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <div className="text-center">
+          <Diamond className="w-16 h-16 text-slate-300 mx-auto mb-4" />
+          <h2 className="text-xl font-bold text-slate-900 mb-2">No Project Selected</h2>
+          <p className="text-slate-600">Create a project to start planning</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="h-full flex flex-col">
+      <div className="bg-white border-b border-slate-200 px-6 py-3 flex items-center justify-between">
+        <div className="flex items-center gap-4">
+          <Select value={selectedProject} onValueChange={setSelectedProject}>
+            <SelectTrigger className="w-64">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {projects.map(p => (
+                <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => handleCreateNode("phase")}
+              className="bg-indigo-50 border-indigo-300 text-indigo-700 hover:bg-indigo-100"
+            >
+              <Package className="w-4 h-4 mr-2" />
+              Phase
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => handleCreateNode("task")}
+            >
+              <CheckSquare className="w-4 h-4 mr-2" />
+              Task
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => handleCreateNode("deliverable")}
+            >
+              <Package className="w-4 h-4 mr-2" />
+              Deliverable
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => handleCreateNode("milestone")}
+            >
+              <Diamond className="w-4 h-4 mr-2" />
+              Milestone
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => handleCreateNode("person")}
+            >
+              <User className="w-4 h-4 mr-2" />
+              Person
+            </Button>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <Button
+            variant={linkMode ? "default" : "outline"}
+            size="sm"
+            onClick={() => {
+              setLinkMode(!linkMode);
+              setLinkFrom(null);
+            }}
+          >
+            <LinkIcon className="w-4 h-4 mr-2" />
+            {linkMode ? (linkFrom ? "Click successor..." : "Click predecessor...") : "Link"}
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => setZoom(Math.max(0.5, zoom - 0.1))}>
+            <ZoomOut className="w-4 h-4" />
+          </Button>
+          <span className="text-sm text-slate-600 min-w-12 text-center">{Math.round(zoom * 100)}%</span>
+          <Button variant="outline" size="sm" onClick={() => setZoom(Math.min(2, zoom + 0.1))}>
+            <ZoomIn className="w-4 h-4" />
+          </Button>
+        </div>
+      </div>
+
+      <div
+        ref={canvasRef}
+        className="flex-1 relative overflow-hidden bg-slate-50 select-none"
+        style={{
+          backgroundImage: `radial-gradient(circle, #cbd5e1 1px, transparent 1px)`,
+          backgroundSize: `${20 * zoom}px ${20 * zoom}px`,
+          backgroundPosition: `${viewOffset.x}px ${viewOffset.y}px`,
+          cursor: isPanning ? 'grabbing' : draggedNode ? 'grabbing' : resizingPhase ? `${resizeHandle}-resize` : linkMode ? 'crosshair' : 'grab'
+        }}
+        onMouseDown={handleCanvasMouseDown}
+        onMouseMove={handleMouseMove}
+        onMouseUp={handleMouseUp}
+        onMouseLeave={handleMouseUp}
+      >
+        <div
+          style={{
+            transform: `translate(${viewOffset.x}px, ${viewOffset.y}px) scale(${zoom})`,
+            transformOrigin: '0 0',
+            width: '5000px',
+            height: '5000px',
+            position: 'absolute'
+          }}
+        >
+          <svg
+            className="absolute top-0 left-0"
+            style={{ width: '5000px', height: '5000px', pointerEvents: 'auto' }}
+          >
+            {getEdgePositions().map((edge, i) => (
+              <ConnectionLine key={i} {...edge} />
+            ))}
+          </svg>
+
+          {/* Render phases first (behind other nodes) */}
+          {nodes.filter(node => node.type === "phase").map(node => {
+            const pos = getNodePosition(node);
+            const dims = getNodeDimensions(node);
+            const isResizing = resizingPhase === node.id;
+            
+            return (
+              <div
+                key={node.id}
+                onMouseDown={(e) => handleNodeMouseDown(e, node.id)}
+                style={{
+                  position: 'absolute',
+                  left: `${pos.x}px`,
+                  top: `${pos.y}px`,
+                  width: `${dims.width}px`,
+                  height: `${dims.height}px`,
+                  border: '3px dashed #6366f1',
+                  borderRadius: '12px',
+                  backgroundColor: 'rgba(99, 102, 241, 0.05)',
+                  cursor: linkMode ? 'crosshair' : 'move',
+                  userSelect: 'none',
+                  pointerEvents: 'auto',
+                }}
+                className={`transition-shadow hover:shadow-lg group ${isResizing ? 'shadow-xl' : ''}`}
+              >
+                <div className="p-4">
+                  <div className="flex items-center justify-between">
+                    <h3 className="font-bold text-indigo-900 text-lg">{node.title}</h3>
+                    <Button
+                      variant="secondary"
+                      size="icon"
+                      className="w-6 h-6 rounded-full opacity-0 group-hover:opacity-100 transition-opacity shadow-lg"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleEditNode(node);
+                      }}
+                    >
+                      <Pencil className="w-3 h-3" />
+                    </Button>
+                  </div>
+                  {node.start_date && node.due_date && (
+                    <p className="text-sm text-indigo-600 mt-1">
+                      {format(parseISO(node.start_date), "MMM d, yyyy")} &mdash; {format(parseISO(node.due_date), "MMM d, yyyy")}
+                    </p>
+                  )}
+                </div>
+                
+                {/* Resize handles */}
+                <div 
+                  className="absolute top-0 right-0 w-4 h-4 bg-indigo-500 rounded-full cursor-ne-resize opacity-0 group-hover:opacity-100 transition-opacity -mt-2 -mr-2"
+                  onMouseDown={(e) => handlePhaseResizeStart(e, node.id, 'ne')}
+                />
+                <div 
+                  className="absolute top-0 left-0 w-4 h-4 bg-indigo-500 rounded-full cursor-nw-resize opacity-0 group-hover:opacity-100 transition-opacity -mt-2 -ml-2"
+                  onMouseDown={(e) => handlePhaseResizeStart(e, node.id, 'nw')}
+                />
+                <div 
+                  className="absolute bottom-0 right-0 w-4 h-4 bg-indigo-500 rounded-full cursor-se-resize opacity-0 group-hover:opacity-100 transition-opacity -mb-2 -mr-2"
+                  onMouseDown={(e) => handlePhaseResizeStart(e, node.id, 'se')}
+                />
+                <div 
+                  className="absolute bottom-0 left-0 w-4 h-4 bg-indigo-500 rounded-full cursor-sw-resize opacity-0 group-hover:opacity-100 transition-opacity -mb-2 -ml-2"
+                  onMouseDown={(e) => handlePhaseResizeStart(e, node.id, 'sw')}
+                />
+                <div 
+                  className="absolute top-1/2 right-0 w-3 h-8 bg-indigo-500 rounded-l cursor-e-resize opacity-0 group-hover:opacity-100 transition-opacity -translate-y-1/2 -mr-1.5"
+                  onMouseDown={(e) => handlePhaseResizeStart(e, node.id, 'e')}
+                />
+                <div 
+                  className="absolute top-1/2 left-0 w-3 h-8 bg-indigo-500 rounded-r cursor-w-resize opacity-0 group-hover:opacity-100 transition-opacity -translate-y-1/2 -ml-1.5"
+                  onMouseDown={(e) => handlePhaseResizeStart(e, node.id, 'w')}
+                />
+                <div 
+                  className="absolute top-0 left-1/2 w-8 h-3 bg-indigo-500 rounded-b cursor-n-resize opacity-0 group-hover:opacity-100 transition-opacity -translate-x-1/2 -mt-1.5"
+                  onMouseDown={(e) => handlePhaseResizeStart(e, node.id, 'n')}
+                />
+                <div 
+                  className="absolute bottom-0 left-1/2 w-8 h-3 bg-indigo-500 rounded-t cursor-s-resize opacity-0 group-hover:opacity-100 transition-opacity -translate-x-1/2 -mb-1.5"
+                  onMouseDown={(e) => handlePhaseResizeStart(e, node.id, 's')}
+                />
+              </div>
+            );
+          })}
+
+          {/* Render other nodes */}
+          {nodes.filter(node => node.type !== "phase").map(node => {
+            const pos = getNodePosition(node);
+            return (
+              <div
+                key={node.id}
+                onMouseDown={(e) => handleNodeMouseDown(e, node.id)}
+                style={{
+                  cursor: linkMode ? 'crosshair' : 'move',
+                  userSelect: 'none'
+                }}
+              >
+                <NodeComponent
+                  node={node}
+                  isSelected={selectedNodes.includes(node.id)}
+                  onSelect={() => {}}
+                  onEdit={handleEditNode}
+                  style={{
+                    left: `${pos.x}px`,
+                    top: `${pos.y}px`,
+                  }}
+                />
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Node Edit Dialog */}
+      <Dialog open={showNodeDialog} onOpenChange={setShowNodeDialog}>
+        <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{editingNode ? `Edit ${nodeType}` : `Create ${nodeType}`}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div>
+              <Label htmlFor="node-title">Title</Label>
+              <Input
+                id="node-title"
+                value={nodeData.title}
+                onChange={(e) => setNodeData({ ...nodeData, title: e.target.value })}
+                placeholder={`Enter ${nodeType} name`}
+              />
+            </div>
+
+            {nodeType === "phase" && (
+              <>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label htmlFor="phase-width">Width (px)</Label>
+                    <Input
+                      id="phase-width"
+                      type="number"
+                      min="200"
+                      value={nodeData.width}
+                      onChange={(e) => setNodeData({ ...nodeData, width: parseInt(e.target.value) || 400 })}
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="phase-height">Height (px)</Label>
+                    <Input
+                      id="phase-height"
+                      type="number"
+                      min="200"
+                      value={nodeData.height}
+                      onChange={(e) => setNodeData({ ...nodeData, height: parseInt(e.target.value) || 300 })}
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label htmlFor="start-date">Start Date</Label>
+                    <Input
+                      id="start-date"
+                      type="date"
+                      value={nodeData.start_date}
+                      onChange={(e) => handleStartDateChange(e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="due-date">End Date</Label>
+                    <Input
+                      id="due-date"
+                      type="date"
+                      value={nodeData.due_date}
+                      onChange={(e) => handleDueDateChange(e.target.value)}
+                    />
+                  </div>
+                </div>
+              </>
+            )}
+
+            {nodeType !== "person" && nodeType !== "phase" && (
+              <>
+                {availablePhases.length > 0 && (
+                  <div>
+                    <Label htmlFor="phase">Phase (Optional)</Label>
+                    <Select 
+                      value={nodeData.phase_id || "none"} 
+                      onValueChange={(value) => setNodeData({ ...nodeData, phase_id: value === "none" ? null : value })}
+                    >
+                      <SelectTrigger id="phase">
+                        <SelectValue placeholder="Select phase..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">No phase</SelectItem>
+                        {availablePhases.map(phase => (
+                          <SelectItem key={phase.id} value={phase.id}>
+                            {phase.title}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+
+                {!editingNode && availablePredecessors.length > 0 && (
+                  <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg space-y-3">
+                    <div>
+                      <Label htmlFor="predecessor">Predecessor (Optional)</Label>
+                      <Select 
+                        value={nodeData.predecessor_id || "none"} 
+                        onValueChange={handlePredecessorChange}
+                      >
+                        <SelectTrigger id="predecessor">
+                          <SelectValue placeholder="Select predecessor..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">No predecessor</SelectItem>
+                          {availablePredecessors.map(node => (
+                            <SelectItem key={node.id} value={node.id}>
+                              {node.title} ({node.type})
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    {nodeData.predecessor_id && (
+                      <div>
+                        <Label htmlFor="dependency-type">Dependency Type</Label>
+                        <Select 
+                          value={nodeData.dependency_type} 
+                          onValueChange={handleDependencyTypeChange}
+                        >
+                          <SelectTrigger id="dependency-type">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="finish_to_start">
+                              <div>
+                                <div className="font-medium">Finish-to-Start (FS)</div>
+                                <div className="text-xs text-slate-500">Start after predecessor finishes</div>
+                              </div>
+                            </SelectItem>
+                            <SelectItem value="start_to_start">
+                              <div>
+                                <div className="font-medium">Start-to-Start (SS)</div>
+                                <div className="text-xs text-slate-500">Start when predecessor starts</div>
+                              </div>
+                            </SelectItem>
+                            <SelectItem value="finish_to_finish">
+                              <div>
+                                <div className="font-medium">Finish-to-Finish (FF)</div>
+                                <div className="text-xs text-slate-500">Finish when predecessor finishes</div>
+                              </div>
+                            </SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label htmlFor="start-date">Start Date</Label>
+                    <Input
+                      id="start-date"
+                      type="date"
+                      value={nodeData.start_date}
+                      onChange={(e) => handleStartDateChange(e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="duration">Duration (days)</Label>
+                    <Input
+                      id="duration"
+                      type="number"
+                      min="0"
+                      value={nodeData.duration_days}
+                      onChange={(e) => handleDurationChange(e.target.value)}
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <Label htmlFor="due-date">Due Date</Label>
+                  <Input
+                    id="due-date"
+                    type="date"
+                    value={nodeData.due_date}
+                    onChange={(e) => handleDueDateChange(e.target.value)}
+                  />
+                  <p className="text-xs text-slate-500 mt-1">
+                    Duration: {nodeData.duration_days} days
+                  </p>
+                </div>
+
+                {nodeType === "task" && (
+                  <>
+                    <div>
+                      <Label htmlFor="status">Status</Label>
+                      <Select value={nodeData.status} onValueChange={(value) => setNodeData({ ...nodeData, status: value })}>
+                        <SelectTrigger id="status">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="not_started">Not Started</SelectItem>
+                          <SelectItem value="in_progress">In Progress</SelectItem>
+                          <SelectItem value="blocked">Blocked</SelectItem>
+                          <SelectItem value="done">Done</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div>
+                      <Label htmlFor="percent-complete">Progress (%)</Label>
+                      <Input
+                        id="percent-complete"
+                        type="number"
+                        min="0"
+                        max="100"
+                        value={nodeData.percent_complete}
+                        onChange={(e) => setNodeData({ ...nodeData, percent_complete: parseInt(e.target.value) || 0 })}
+                      />
+                    </div>
+
+                    <div>
+                      <Label htmlFor="priority">Priority</Label>
+                      <Select value={nodeData.priority} onValueChange={(value) => setNodeData({ ...nodeData, priority: value })}>
+                        <SelectTrigger id="priority">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="low">Low</SelectItem>
+                          <SelectItem value="medium">Medium</SelectItem>
+                          <SelectItem value="high">High</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div>
+                      <Label htmlFor="discipline">Discipline</Label>
+                      <Select value={nodeData.discipline} onValueChange={(value) => setNodeData({ ...nodeData, discipline: value })}>
+                        <SelectTrigger id="discipline">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="civil">Civil</SelectItem>
+                          <SelectItem value="arch">Architecture</SelectItem>
+                          <SelectItem value="mep">MEP</SelectItem>
+                          <SelectItem value="structural">Structural</SelectItem>
+                          <SelectItem value="landscape">Landscape</SelectItem>
+                          <SelectItem value="survey">Survey</SelectItem>
+                          <SelectItem value="other">Other</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div>
+                      <Label htmlFor="notes">Notes</Label>
+                      <Textarea
+                        id="notes"
+                        value={nodeData.notes}
+                        onChange={(e) => setNodeData({ ...nodeData, notes: e.target.value })}
+                        placeholder="Additional notes..."
+                        rows={3}
+                      />
+                    </div>
+                  </>
+                )}
+              </>
+            )}
+
+            {nodeType === "person" && (
+              <div>
+                <Label htmlFor="role">Role</Label>
+                <Input
+                  id="role"
+                  value={nodeData.role || ""}
+                  onChange={(e) => setNodeData({ ...nodeData, role: e.target.value })}
+                  placeholder="e.g. Project Manager"
+                />
+              </div>
+            )}
+          </div>
+          <DialogFooter className="flex justify-between">
+            <div>
+              {editingNode && (
+                <Button
+                  variant="destructive"
+                  onClick={handleDeleteNode}
+                >
+                  <Trash2 className="w-4 h-4 mr-2" />
+                  Delete
+                </Button>
+              )}
+            </div>
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={() => setShowNodeDialog(false)}>
+                Cancel
+              </Button>
+              <Button
+                onClick={handleSaveNode}
+                disabled={!nodeData.title}
+                className="bg-slate-900 hover:bg-slate-800"
+              >
+                {editingNode ? "Save Changes" : "Create"}
+              </Button>
+            </div>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edge Edit Dialog */}
+      <Dialog open={showEdgeDialog} onOpenChange={setShowEdgeDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Edit Dependency</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div>
+              <Label htmlFor="edge-dependency-type">Dependency Type</Label>
+              <Select 
+                id="edge-dependency-type"
+                value={editingEdge?.dependency_type || "finish_to_start"} 
+                onValueChange={(value) => setEditingEdge({ ...editingEdge, dependency_type: value })}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="finish_to_start">
+                    <div>
+                      <div className="font-medium">Finish-to-Start (FS)</div>
+                      <div className="text-xs text-slate-500">Successor starts when predecessor finishes</div>
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="start_to_start">
+                    <div>
+                      <div className="font-medium">Start-to-Start (SS)</div>
+                      <div className="text-xs text-slate-500">Both tasks start at the same time</div>
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="finish_to_finish">
+                    <div>
+                      <div className="font-medium">Finish-to-Finish (FF)</div>
+                      <div className="text-xs text-slate-500">Both tasks finish at the same time</div>
+                    </div>
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {editingEdge && (
+              <div className="p-4 bg-slate-50 rounded-lg">
+                <p className="text-sm text-slate-700">
+                  <span className="font-semibold">From:</span>{" "}
+                  {nodes.find(n => n.id === editingEdge.from_node_id)?.title}
+                </p>
+                <p className="text-sm text-slate-700 mt-1">
+                  <span className="font-semibold">To:</span>{" "}
+                  {nodes.find(n => n.id === editingEdge.to_node_id)?.title}
+                </p>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowEdgeDialog(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleSaveEdge}
+              className="bg-slate-900 hover:bg-slate-800"
+            >
+              Save Changes
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}

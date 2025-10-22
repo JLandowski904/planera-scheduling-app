@@ -1,0 +1,381 @@
+import React, { useState } from "react";
+import { base44 } from "@/api/base44Client";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Plus, FolderKanban, Calendar, Trash2, Copy } from "lucide-react";
+import { Link } from "react-router-dom";
+import { createPageUrl } from "@/utils";
+import { format } from "date-fns";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+
+export default function Projects() {
+  const [showCreateDialog, setShowCreateDialog] = useState(false);
+  const [showDuplicateDialog, setShowDuplicateDialog] = useState(false);
+  const [projectToDuplicate, setProjectToDuplicate] = useState(null);
+  const [newProject, setNewProject] = useState({
+    name: "",
+    start_date: format(new Date(), "yyyy-MM-dd"),
+    end_date: format(new Date(Date.now() + 90 * 24 * 60 * 60 * 1000), "yyyy-MM-dd"),
+    status: "planning",
+    description: ""
+  });
+  const [duplicateProjectName, setDuplicateProjectName] = useState("");
+
+  const queryClient = useQueryClient();
+
+  const { data: projects = [], isLoading } = useQuery({
+    queryKey: ['projects'],
+    queryFn: () => base44.entities.Project.list("-created_date"),
+  });
+
+  const createProjectMutation = useMutation({
+    mutationFn: (data) => base44.entities.Project.create(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['projects'] });
+      setShowCreateDialog(false);
+      setNewProject({
+        name: "",
+        start_date: format(new Date(), "yyyy-MM-dd"),
+        end_date: format(new Date(Date.now() + 90 * 24 * 60 * 60 * 1000), "yyyy-MM-dd"),
+        status: "planning",
+        description: ""
+      });
+    },
+  });
+
+  const deleteProjectMutation = useMutation({
+    mutationFn: (id) => base44.entities.Project.delete(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['projects'] });
+    },
+  });
+
+  const handleDuplicateProject = async () => {
+    if (!projectToDuplicate || !duplicateProjectName) return;
+
+    try {
+      // Create new project
+      const newProj = await base44.entities.Project.create({
+        name: duplicateProjectName,
+        start_date: projectToDuplicate.start_date,
+        end_date: projectToDuplicate.end_date,
+        status: "planning",
+        description: projectToDuplicate.description || ""
+      });
+
+      // Get all nodes from original project
+      const originalNodes = await base44.entities.Node.filter({ 
+        project_id: projectToDuplicate.id 
+      });
+
+      // Create a mapping of old node IDs to new node IDs
+      const nodeIdMap = {};
+
+      // Copy all nodes
+      if (originalNodes.length > 0) {
+        const newNodes = await Promise.all(
+          originalNodes.map(async (node) => {
+            const { id, created_date, updated_date, created_by, project_id, ...nodeData } = node;
+            const newNode = await base44.entities.Node.create({
+              ...nodeData,
+              project_id: newProj.id
+            });
+            nodeIdMap[node.id] = newNode.id;
+            return newNode;
+          })
+        );
+      }
+
+      // Get all edges from original project
+      const originalEdges = await base44.entities.Edge.filter({ 
+        project_id: projectToDuplicate.id 
+      });
+
+      // Copy all edges with updated node references
+      if (originalEdges.length > 0) {
+        await Promise.all(
+          originalEdges.map(async (edge) => {
+            const { id, created_date, updated_date, created_by, ...edgeData } = edge;
+            await base44.entities.Edge.create({
+              project_id: newProj.id,
+              from_node_id: nodeIdMap[edge.from_node_id],
+              to_node_id: nodeIdMap[edge.to_node_id],
+              dependency_type: edge.dependency_type
+            });
+          })
+        );
+      }
+
+      queryClient.invalidateQueries({ queryKey: ['projects'] });
+      setShowDuplicateDialog(false);
+      setProjectToDuplicate(null);
+      setDuplicateProjectName("");
+    } catch (error) {
+      console.error("Error duplicating project:", error);
+      alert("Failed to duplicate project. Please try again.");
+    }
+  };
+
+  const openDuplicateDialog = (project) => {
+    setProjectToDuplicate(project);
+    setDuplicateProjectName(`${project.name} (Copy)`);
+    setShowDuplicateDialog(true);
+  };
+
+  const statusColors = {
+    planning: "bg-blue-100 text-blue-700",
+    active: "bg-green-100 text-green-700",
+    on_hold: "bg-yellow-100 text-yellow-700",
+    completed: "bg-slate-100 text-slate-700"
+  };
+
+  return (
+    <div className="p-8 max-w-7xl mx-auto">
+      <div className="flex justify-between items-center mb-8">
+        <div>
+          <h2 className="text-3xl font-bold text-slate-900">Projects</h2>
+          <p className="text-slate-600 mt-1">Manage your design and construction projects</p>
+        </div>
+        <Button
+          onClick={() => setShowCreateDialog(true)}
+          className="bg-slate-900 hover:bg-slate-800 shadow-lg"
+        >
+          <Plus className="w-4 h-4 mr-2" />
+          New Project
+        </Button>
+      </div>
+
+      {isLoading ? (
+        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {[1, 2, 3].map((i) => (
+            <Card key={i} className="p-6 animate-pulse">
+              <div className="h-6 bg-slate-200 rounded w-3/4 mb-4" />
+              <div className="h-4 bg-slate-200 rounded w-1/2" />
+            </Card>
+          ))}
+        </div>
+      ) : projects.length === 0 ? (
+        <Card className="p-12 text-center">
+          <FolderKanban className="w-16 h-16 text-slate-300 mx-auto mb-4" />
+          <h3 className="text-xl font-semibold text-slate-900 mb-2">No projects yet</h3>
+          <p className="text-slate-600 mb-6">Create your first project to start scheduling</p>
+          <Button onClick={() => setShowCreateDialog(true)}>
+            <Plus className="w-4 h-4 mr-2" />
+            Create Project
+          </Button>
+        </Card>
+      ) : (
+        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {projects.map((project) => (
+            <Card key={project.id} className="p-6 hover:shadow-lg transition-shadow duration-200 group relative">
+              <Link to={createPageUrl("Whiteboard") + `?project=${project.id}`}>
+                <div className="flex items-start justify-between mb-4">
+                  <div className="flex-1">
+                    <h3 className="text-lg font-bold text-slate-900 mb-2 group-hover:text-slate-700 transition-colors">
+                      {project.name}
+                    </h3>
+                    <span className={`inline-block px-2 py-1 rounded-full text-xs font-medium ${statusColors[project.status]}`}>
+                      {project.status.replace("_", " ")}
+                    </span>
+                  </div>
+                </div>
+                
+                {project.description && (
+                  <p className="text-slate-600 text-sm mb-4 line-clamp-2">{project.description}</p>
+                )}
+                
+                <div className="flex items-center gap-4 text-sm text-slate-500">
+                  <div className="flex items-center gap-1">
+                    <Calendar className="w-4 h-4" />
+                    <span>{format(new Date(project.start_date), "MMM d")}</span>
+                  </div>
+                  <span>→</span>
+                  <div className="flex items-center gap-1">
+                    <Calendar className="w-4 h-4" />
+                    <span>{format(new Date(project.end_date), "MMM d, yyyy")}</span>
+                  </div>
+                </div>
+              </Link>
+              
+              <div className="absolute top-4 right-4 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    openDuplicateDialog(project);
+                  }}
+                >
+                  <Copy className="w-4 h-4 text-slate-600" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    if (confirm("Delete this project? This will remove all nodes and connections.")) {
+                      deleteProjectMutation.mutate(project.id);
+                    }
+                  }}
+                >
+                  <Trash2 className="w-4 h-4 text-red-500" />
+                </Button>
+              </div>
+            </Card>
+          ))}
+        </div>
+      )}
+
+      {/* Create Project Dialog */}
+      <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Create New Project</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div>
+              <Label htmlFor="name">Project Name</Label>
+              <Input
+                id="name"
+                value={newProject.name}
+                onChange={(e) => setNewProject({ ...newProject, name: e.target.value })}
+                placeholder="Site Design – Lakeside Industrial"
+              />
+            </div>
+            
+            <div>
+              <Label htmlFor="description">Description (optional)</Label>
+              <Input
+                id="description"
+                value={newProject.description}
+                onChange={(e) => setNewProject({ ...newProject, description: e.target.value })}
+                placeholder="Project overview..."
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="start_date">Start Date</Label>
+                <Input
+                  id="start_date"
+                  type="date"
+                  value={newProject.start_date}
+                  onChange={(e) => setNewProject({ ...newProject, start_date: e.target.value })}
+                />
+              </div>
+              <div>
+                <Label htmlFor="end_date">End Date</Label>
+                <Input
+                  id="end_date"
+                  type="date"
+                  value={newProject.end_date}
+                  onChange={(e) => setNewProject({ ...newProject, end_date: e.target.value })}
+                />
+              </div>
+            </div>
+
+            <div>
+              <Label htmlFor="status">Status</Label>
+              <Select value={newProject.status} onValueChange={(value) => setNewProject({ ...newProject, status: value })}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="planning">Planning</SelectItem>
+                  <SelectItem value="active">Active</SelectItem>
+                  <SelectItem value="on_hold">On Hold</SelectItem>
+                  <SelectItem value="completed">Completed</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowCreateDialog(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={() => createProjectMutation.mutate(newProject)}
+              disabled={!newProject.name}
+              className="bg-slate-900 hover:bg-slate-800"
+            >
+              Create Project
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Duplicate Project Dialog */}
+      <Dialog open={showDuplicateDialog} onOpenChange={setShowDuplicateDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Duplicate Project</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div>
+              <Label>Original Project</Label>
+              <Input
+                value={projectToDuplicate?.name || ""}
+                disabled
+                className="bg-slate-50"
+              />
+            </div>
+            
+            <div>
+              <Label htmlFor="duplicate-name">New Project Name</Label>
+              <Input
+                id="duplicate-name"
+                value={duplicateProjectName}
+                onChange={(e) => setDuplicateProjectName(e.target.value)}
+                placeholder="Enter new project name"
+              />
+            </div>
+
+            <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+              <p className="text-sm text-blue-900">
+                This will copy all tasks, milestones, deliverables, and their connections to the new project.
+              </p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button 
+              variant="outline" 
+              onClick={() => {
+                setShowDuplicateDialog(false);
+                setProjectToDuplicate(null);
+                setDuplicateProjectName("");
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleDuplicateProject}
+              disabled={!duplicateProjectName}
+              className="bg-slate-900 hover:bg-slate-800"
+            >
+              <Copy className="w-4 h-4 mr-2" />
+              Duplicate Project
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}

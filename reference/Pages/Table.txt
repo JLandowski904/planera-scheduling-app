@@ -1,0 +1,294 @@
+import React, { useState, useEffect } from "react";
+import { base44 } from "@/api/base44Client";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { format } from "date-fns";
+import { Search, Download, Filter, Layers } from "lucide-react";
+
+export default function TableView() {
+  const [selectedProject, setSelectedProject] = useState(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [filterType, setFilterType] = useState("all");
+  const [filterStatus, setFilterStatus] = useState("all");
+  const [filterPhase, setFilterPhase] = useState("all");
+
+  const queryClient = useQueryClient();
+
+  const { data: projects = [] } = useQuery({
+    queryKey: ['projects'],
+    queryFn: () => base44.entities.Project.list("-created_date"),
+  });
+
+  const { data: nodes = [] } = useQuery({
+    queryKey: ['nodes', selectedProject],
+    queryFn: () => base44.entities.Node.filter({ project_id: selectedProject }),
+    enabled: !!selectedProject,
+  });
+
+  useEffect(() => {
+    if (projects.length > 0 && !selectedProject) {
+      setSelectedProject(projects[0].id);
+    }
+  }, [projects]);
+
+  const updateNodeMutation = useMutation({
+    mutationFn: ({ id, data }) => base44.entities.Node.update(id, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['nodes'] });
+    },
+  });
+
+  const phases = nodes.filter(n => n.type === "phase");
+
+  const filteredNodes = nodes
+    .filter(node => node.type !== "phase")
+    .filter(node => {
+      const matchesSearch = node.title.toLowerCase().includes(searchQuery.toLowerCase());
+      const matchesType = filterType === "all" || node.type === filterType;
+      const matchesStatus = filterStatus === "all" || node.status === filterStatus;
+      const matchesPhase = filterPhase === "all" || node.phase_id === filterPhase;
+      return matchesSearch && matchesType && matchesStatus && matchesPhase;
+    });
+
+  const exportToCSV = () => {
+    const headers = ["Title", "Type", "Phase", "Status", "Start Date", "Due Date", "Progress", "Priority", "Discipline", "Tags"];
+    const rows = filteredNodes.map(node => {
+      const phase = node.phase_id ? phases.find(p => p.id === node.phase_id) : null;
+      return [
+        node.title,
+        node.type,
+        phase ? phase.title : "",
+        node.status || "",
+        node.start_date || "",
+        node.due_date || "",
+        node.percent_complete || 0,
+        node.priority || "",
+        node.discipline || "",
+        (node.tags || []).join("; ")
+      ];
+    });
+
+    const csv = [headers, ...rows].map(row => row.map(cell => `"${cell}"`).join(",")).join("\n");
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `project-data-${format(new Date(), "yyyy-MM-dd")}.csv`;
+    a.click();
+  };
+
+  const statusColors = {
+    not_started: "bg-slate-200 text-slate-700",
+    in_progress: "bg-blue-100 text-blue-700",
+    blocked: "bg-red-100 text-red-700",
+    done: "bg-green-100 text-green-700"
+  };
+
+  const typeColors = {
+    milestone: "bg-amber-100 text-amber-700",
+    deliverable: "bg-emerald-100 text-emerald-700",
+    task: "bg-sky-100 text-sky-700",
+    person: "bg-purple-100 text-purple-700"
+  };
+
+  if (!selectedProject) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <div className="text-center">
+          <h2 className="text-xl font-bold text-slate-900 mb-2">No Project Selected</h2>
+          <p className="text-slate-600">Create a project to view data table</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="h-full flex flex-col">
+      <div className="bg-white border-b border-slate-200 px-6 py-4 space-y-4">
+        <div className="flex items-center justify-between">
+          <h2 className="text-2xl font-bold text-slate-900">Table View</h2>
+          <div className="flex items-center gap-3">
+            <Select value={selectedProject} onValueChange={setSelectedProject}>
+              <SelectTrigger className="w-64">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {projects.map(p => (
+                  <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Button variant="outline" onClick={exportToCSV}>
+              <Download className="w-4 h-4 mr-2" />
+              Export CSV
+            </Button>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-4">
+          <div className="flex-1 relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+            <Input
+              placeholder="Search items..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-9"
+            />
+          </div>
+          <Select value={filterType} onValueChange={setFilterType}>
+            <SelectTrigger className="w-40">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Types</SelectItem>
+              <SelectItem value="milestone">Milestones</SelectItem>
+              <SelectItem value="deliverable">Deliverables</SelectItem>
+              <SelectItem value="task">Tasks</SelectItem>
+              <SelectItem value="person">People</SelectItem>
+            </SelectContent>
+          </Select>
+          <Select value={filterStatus} onValueChange={setFilterStatus}>
+            <SelectTrigger className="w-40">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Status</SelectItem>
+              <SelectItem value="not_started">Not Started</SelectItem>
+              <SelectItem value="in_progress">In Progress</SelectItem>
+              <SelectItem value="blocked">Blocked</SelectItem>
+              <SelectItem value="done">Done</SelectItem>
+            </SelectContent>
+          </Select>
+          {phases.length > 0 && (
+            <Select value={filterPhase} onValueChange={setFilterPhase}>
+              <SelectTrigger className="w-40">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">
+                  <div className="flex items-center gap-2">
+                    <Layers className="w-4 h-4" />
+                    <span>All Phases</span>
+                  </div>
+                </SelectItem>
+                {phases.map(phase => (
+                  <SelectItem key={phase.id} value={phase.id}>
+                    {phase.title}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+        </div>
+      </div>
+
+      <div className="flex-1 overflow-auto p-6">
+        <div className="bg-white rounded-lg border border-slate-200">
+          <Table>
+            <TableHeader>
+              <TableRow className="bg-slate-50">
+                <TableHead className="font-semibold">Title</TableHead>
+                <TableHead className="font-semibold">Type</TableHead>
+                <TableHead className="font-semibold">Phase</TableHead>
+                <TableHead className="font-semibold">Status</TableHead>
+                <TableHead className="font-semibold">Start Date</TableHead>
+                <TableHead className="font-semibold">Due Date</TableHead>
+                <TableHead className="font-semibold">Progress</TableHead>
+                <TableHead className="font-semibold">Priority</TableHead>
+                <TableHead className="font-semibold">Discipline</TableHead>
+                <TableHead className="font-semibold">Tags</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {filteredNodes.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={10} className="text-center text-slate-500 py-12">
+                    No items found
+                  </TableCell>
+                </TableRow>
+              ) : (
+                filteredNodes.map(node => {
+                  const phase = node.phase_id ? phases.find(p => p.id === node.phase_id) : null;
+                  
+                  return (
+                    <TableRow key={node.id} className="hover:bg-slate-50 transition-colors">
+                      <TableCell className="font-medium">{node.title}</TableCell>
+                      <TableCell>
+                        <Badge className={typeColors[node.type]}>
+                          {node.type}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        {phase ? (
+                          <Badge variant="outline" className="text-indigo-700 border-indigo-300">
+                            {phase.title}
+                          </Badge>
+                        ) : "-"}
+                      </TableCell>
+                      <TableCell>
+                        {node.status && (
+                          <Badge className={statusColors[node.status]}>
+                            {node.status.replace("_", " ")}
+                          </Badge>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {node.start_date ? format(new Date(node.start_date), "MMM d, yyyy") : "-"}
+                      </TableCell>
+                      <TableCell>
+                        {node.due_date ? format(new Date(node.due_date), "MMM d, yyyy") : "-"}
+                      </TableCell>
+                      <TableCell>
+                        {node.percent_complete !== undefined ? (
+                          <div className="flex items-center gap-2">
+                            <div className="w-16 h-2 bg-slate-200 rounded-full">
+                              <div
+                                className="h-full bg-sky-500 rounded-full"
+                                style={{ width: `${node.percent_complete}%` }}
+                              />
+                            </div>
+                            <span className="text-xs text-slate-600">{node.percent_complete}%</span>
+                          </div>
+                        ) : "-"}
+                      </TableCell>
+                      <TableCell>
+                        {node.priority && (
+                          <Badge variant="outline" className="capitalize">
+                            {node.priority}
+                          </Badge>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {node.discipline ? (
+                          <span className="text-sm capitalize">{node.discipline}</span>
+                        ) : "-"}
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex flex-wrap gap-1">
+                          {node.tags?.slice(0, 2).map((tag, i) => (
+                            <Badge key={i} variant="outline" className="text-xs">
+                              {tag}
+                            </Badge>
+                          ))}
+                          {node.tags?.length > 2 && (
+                            <Badge variant="outline" className="text-xs">
+                              +{node.tags.length - 2}
+                            </Badge>
+                          )}
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })
+              )}
+            </TableBody>
+          </Table>
+        </div>
+      </div>
+    </div>
+  );
+}

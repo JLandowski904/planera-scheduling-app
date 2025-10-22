@@ -1,0 +1,29 @@
+{
+  "name": "Edge",
+  "type": "object",
+  "properties": {
+    "project_id": {
+      "type": "string"
+    },
+    "from_node_id": {
+      "type": "string"
+    },
+    "to_node_id": {
+      "type": "string"
+    },
+    "dependency_type": {
+      "type": "string",
+      "enum": [
+        "finish_to_start",
+        "start_to_start",
+        "finish_to_finish"
+      ],
+      "default": "finish_to_start"
+    }
+  },
+  "required": [
+    "project_id",
+    "from_node_id",
+    "to_node_id"
+  ]
+}

@@ -1,0 +1,120 @@
+{
+  "name": "Node",
+  "type": "object",
+  "properties": {
+    "project_id": {
+      "type": "string",
+      "description": "Reference to project"
+    },
+    "type": {
+      "type": "string",
+      "enum": [
+        "milestone",
+        "deliverable",
+        "task",
+        "person",
+        "phase"
+      ],
+      "description": "Type of node"
+    },
+    "title": {
+      "type": "string"
+    },
+    "start_date": {
+      "type": "string",
+      "format": "date"
+    },
+    "due_date": {
+      "type": "string",
+      "format": "date"
+    },
+    "duration_days": {
+      "type": "number"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "not_started",
+        "in_progress",
+        "blocked",
+        "done"
+      ],
+      "default": "not_started"
+    },
+    "priority": {
+      "type": "string",
+      "enum": [
+        "low",
+        "medium",
+        "high"
+      ],
+      "default": "medium"
+    },
+    "percent_complete": {
+      "type": "number",
+      "default": 0,
+      "minimum": 0,
+      "maximum": 100
+    },
+    "assignees": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "default": []
+    },
+    "tags": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "default": []
+    },
+    "discipline": {
+      "type": "string",
+      "enum": [
+        "civil",
+        "arch",
+        "mep",
+        "structural",
+        "landscape",
+        "survey",
+        "other"
+      ]
+    },
+    "notes": {
+      "type": "string"
+    },
+    "position_x": {
+      "type": "number",
+      "default": 0
+    },
+    "position_y": {
+      "type": "number",
+      "default": 0
+    },
+    "avatar": {
+      "type": "string"
+    },
+    "role": {
+      "type": "string"
+    },
+    "phase_id": {
+      "type": "string",
+      "description": "Reference to parent phase"
+    },
+    "width": {
+      "type": "number",
+      "default": 400
+    },
+    "height": {
+      "type": "number",
+      "default": 300
+    }
+  },
+  "required": [
+    "project_id",
+    "type",
+    "title"
+  ]
+}

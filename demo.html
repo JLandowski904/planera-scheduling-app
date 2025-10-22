@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Planera - Construction Scheduling App (Demo)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .demo-node { 
+            position: absolute; 
+            border: 2px solid #e5e7eb; 
+            border-radius: 8px; 
+            padding: 12px; 
+            background: white; 
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            cursor: move;
+            min-width: 120px;
+        }
+        .demo-node.milestone { 
+            background: #8b5cf6; 
+            color: white; 
+            clip-path: polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%);
+            width: 80px;
+            height: 80px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .demo-node.deliverable { 
+            background: #06b6d4; 
+            color: white; 
+            border-radius: 12px;
+        }
+        .demo-node.task { 
+            background: #10b981; 
+            color: white; 
+        }
+        .demo-node.person { 
+            background: #f59e0b; 
+            color: white; 
+            border-radius: 50%;
+            width: 60px;
+            height: 60px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .demo-edge {
+            position: absolute;
+            height: 2px;
+            background: #6b7280;
+            transform-origin: left center;
+        }
+        .demo-edge::after {
+            content: '';
+            position: absolute;
+            right: -6px;
+            top: -4px;
+            width: 0;
+            height: 0;
+            border-left: 8px solid #6b7280;
+            border-top: 4px solid transparent;
+            border-bottom: 4px solid transparent;
+        }
+        .demo-canvas {
+            background-image: 
+                linear-gradient(rgba(0, 0, 0, 0.1) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(0, 0, 0, 0.1) 1px, transparent 1px);
+            background-size: 20px 20px;
+        }
+    </style>
+</head>
+<body class="bg-gray-50">
+    <!-- Toolbar -->
+    <div class="bg-white border-b border-gray-200 px-4 py-2 flex items-center justify-between">
+        <div class="flex items-center gap-2">
+            <h1 class="text-lg font-semibold text-gray-900 mr-4">Subdivision – Oak Ridge</h1>
+            <button class="px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50">
+                + Task
+            </button>
+            <button class="px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50">
+                + Milestone
+            </button>
+            <button class="px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50">
+                + Deliverable
+            </button>
+            <button class="px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50">
+                + Person
+            </button>
+        </div>
+        <div class="flex items-center gap-2">
+            <button class="px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50">
+                Whiteboard
+            </button>
+            <button class="px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50">
+                Timeline
+            </button>
+            <button class="px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50">
+                Table
+            </button>
+        </div>
+    </div>
+
+    <div class="flex h-screen">
+        <!-- Sidebar -->
+        <div class="w-80 bg-white border-r border-gray-200 p-4">
+            <h3 class="text-sm font-semibold text-gray-900 mb-4">Filters</h3>
+            <div class="space-y-3">
+                <div>
+                    <label class="text-xs font-medium text-gray-700 mb-1 block">Types</label>
+                    <div class="flex flex-wrap gap-1">
+                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">Milestone</span>
+                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">Deliverable</span>
+                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">Task</span>
+                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">Person</span>
+                    </div>
+                </div>
+            </div>
+            
+            <h3 class="text-sm font-semibold text-gray-900 mb-4 mt-6">Nodes (17)</h3>
+            <div class="space-y-2 max-h-96 overflow-y-auto">
+                <div class="p-2 rounded bg-blue-50 border border-blue-300 text-sm">
+                    <div class="flex items-center gap-2">
+                        <span>📅</span>
+                        <span class="font-medium">30% Design</span>
+                    </div>
+                </div>
+                <div class="p-2 rounded bg-white border border-gray-200 text-sm">
+                    <div class="flex items-center gap-2">
+                        <span>✅</span>
+                        <span class="font-medium">Site Plan</span>
+                    </div>
+                </div>
+                <div class="p-2 rounded bg-white border border-gray-200 text-sm">
+                    <div class="flex items-center gap-2">
+                        <span>⏰</span>
+                        <span class="font-medium">Topo Survey</span>
+                    </div>
+                    <div class="text-xs text-gray-500 mt-1">Survey</div>
+                </div>
+                <div class="p-2 rounded bg-white border border-gray-200 text-sm">
+                    <div class="flex items-center gap-2">
+                        <span>👤</span>
+                        <span class="font-medium">PM</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Canvas -->
+        <div class="flex-1 relative overflow-hidden">
+            <div class="demo-canvas w-full h-full relative">
+                <!-- Sample nodes positioned on canvas -->
+                <div class="demo-node person" style="left: 50px; top: 50px;">
+                    <span class="text-sm font-semibold">PM</span>
+                </div>
+                <div class="demo-node person" style="left: 50px; top: 120px;">
+                    <span class="text-sm font-semibold">CE</span>
+                </div>
+                <div class="demo-node person" style="left: 50px; top: 190px;">
+                    <span class="text-sm font-semibold">SW</span>
+                </div>
+                <div class="demo-node person" style="left: 50px; top: 260px;">
+                    <span class="text-sm font-semibold">SV</span>
+                </div>
+
+                <div class="demo-node milestone" style="left: 300px; top: 50px;">
+                    <span class="text-xs font-semibold">30%</span>
+                </div>
+                <div class="demo-node milestone" style="left: 500px; top: 50px;">
+                    <span class="text-xs font-semibold">60%</span>
+                </div>
+                <div class="demo-node milestone" style="left: 700px; top: 50px;">
+                    <span class="text-xs font-semibold">90%</span>
+                </div>
+                <div class="demo-node milestone" style="left: 900px; top: 50px;">
+                    <span class="text-xs font-semibold">Permit</span>
+                </div>
+
+                <div class="demo-node deliverable" style="left: 300px; top: 150px;">
+                    <div class="text-sm font-medium">Site Plan</div>
+                    <div class="text-xs opacity-75">Dec 15</div>
+                </div>
+                <div class="demo-node deliverable" style="left: 500px; top: 150px;">
+                    <div class="text-sm font-medium">Utility Plan</div>
+                    <div class="text-xs opacity-75">Jan 15</div>
+                </div>
+                <div class="demo-node deliverable" style="left: 700px; top: 150px;">
+                    <div class="text-sm font-medium">Stormwater Report</div>
+                    <div class="text-xs opacity-75">Feb 15</div>
+                </div>
+
+                <div class="demo-node task" style="left: 200px; top: 250px;">
+                    <div class="text-sm font-medium">Topo Survey</div>
+                    <div class="text-xs opacity-75">Dec 1-15</div>
+                    <div class="w-full bg-white bg-opacity-30 rounded-full h-1 mt-1">
+                        <div class="bg-white h-1 rounded-full" style="width: 30%"></div>
+                    </div>
+                </div>
+                <div class="demo-node task" style="left: 400px; top: 250px;">
+                    <div class="text-sm font-medium">Utility Coordination</div>
+                    <div class="text-xs opacity-75">Dec 20 - Jan 10</div>
+                    <div class="w-full bg-white bg-opacity-30 rounded-full h-1 mt-1">
+                        <div class="bg-white h-1 rounded-full" style="width: 0%"></div>
+                    </div>
+                </div>
+                <div class="demo-node task" style="left: 600px; top: 250px;">
+                    <div class="text-sm font-medium">Stormwater Modeling</div>
+                    <div class="text-xs opacity-75">Jan 1-30</div>
+                    <div class="w-full bg-white bg-opacity-30 rounded-full h-1 mt-1">
+                        <div class="bg-white h-1 rounded-full" style="width: 0%"></div>
+                    </div>
+                </div>
+
+                <!-- Sample edges -->
+                <div class="demo-edge" style="left: 340px; top: 90px; width: 160px; transform: rotate(0deg);"></div>
+                <div class="demo-edge" style="left: 540px; top: 90px; width: 160px; transform: rotate(0deg);"></div>
+                <div class="demo-edge" style="left: 740px; top: 90px; width: 160px; transform: rotate(0deg);"></div>
+                <div class="demo-edge" style="left: 260px; top: 190px; width: 40px; transform: rotate(0deg);"></div>
+                <div class="demo-edge" style="left: 360px; top: 190px; width: 40px; transform: rotate(0deg);"></div>
+            </div>
+
+            <!-- Zoom indicator -->
+            <div class="absolute bottom-4 right-4 bg-white border border-gray-300 rounded px-2 py-1 text-sm">
+                80%
+            </div>
+        </div>
+    </div>
+
+    <!-- Info overlay -->
+    <div class="fixed bottom-4 left-4 bg-blue-500 text-white px-4 py-2 rounded-lg shadow-lg">
+        <div class="text-sm font-medium">Demo Mode</div>
+        <div class="text-xs opacity-90">This is a static preview. Install Node.js to run the full interactive application.</div>
+    </div>
+
+    <script>
+        // Simple demo interactions
+        document.addEventListener('DOMContentLoaded', function() {
+            const nodes = document.querySelectorAll('.demo-node');
+            
+            nodes.forEach(node => {
+                node.addEventListener('click', function() {
+                    // Remove previous selection
+                    nodes.forEach(n => n.classList.remove('ring-2', 'ring-blue-500'));
+                    // Add selection to clicked node
+                    this.classList.add('ring-2', 'ring-blue-500');
+                });
+            });
+
+            // Add some basic drag functionality
+            let isDragging = false;
+            let currentX;
+            let currentY;
+            let initialX;
+            let initialY;
+            let xOffset = 0;
+            let yOffset = 0;
+
+            nodes.forEach(node => {
+                node.addEventListener('mousedown', dragStart);
+                node.addEventListener('touchstart', dragStart);
+            });
+
+            document.addEventListener('mousemove', drag);
+            document.addEventListener('touchmove', drag);
+            document.addEventListener('mouseup', dragEnd);
+            document.addEventListener('touchend', dragEnd);
+
+            function dragStart(e) {
+                if (e.type === "touchstart") {
+                    initialX = e.touches[0].clientX - xOffset;
+                    initialY = e.touches[0].clientY - yOffset;
+                } else {
+                    initialX = e.clientX - xOffset;
+                    initialY = e.clientY - yOffset;
+                }
+
+                if (e.target === this) {
+                    isDragging = true;
+                }
+            }
+
+            function drag(e) {
+                if (isDragging) {
+                    e.preventDefault();
+                    
+                    if (e.type === "touchmove") {
+                        currentX = e.touches[0].clientX - initialX;
+                        currentY = e.touches[0].clientY - initialY;
+                    } else {
+                        currentX = e.clientX - initialX;
+                        currentY = e.clientY - initialY;
+                    }
+
+                    xOffset = currentX;
+                    yOffset = currentY;
+
+                    e.target.style.transform = `translate(${currentX}px, ${currentY}px)`;
+                }
+            }
+
+            function dragEnd(e) {
+                initialX = currentX;
+                initialY = currentY;
+                isDragging = false;
+            }
+        });
+    </script>
+</body>
+</html>
+
+
