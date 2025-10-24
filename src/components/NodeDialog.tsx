@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { format, addDays, differenceInCalendarDays } from 'date-fns';
-import { Project, Node, NodeType, Phase, TaskStatus, Priority } from '../types';
+import { Project, Node, NodeType, Phase, TaskStatus, Priority, DependencyType } from '../types';
 
 type DialogMode = 'create' | 'edit';
 
@@ -13,11 +13,15 @@ interface NodeDialogProps {
   initialPosition?: { x: number; y: number };
   initialPhaseId?: string | null;
   currentPredecessorId?: string | null;
+  currentPredecessorType?: DependencyType | null;
+  currentSuccessorId?: string | null;
+  currentSuccessorType?: DependencyType | null;
   onClose: () => void;
   onSubmit: (payload: {
     node: Node;
     selectedPhaseId: string | null;
-    predecessorId: string | null;
+    predecessor: { nodeId: string; type: DependencyType } | null;
+    successor: { nodeId: string; type: DependencyType } | null;
   }) => void;
 }
 
@@ -25,6 +29,9 @@ interface TaskFormState {
   title: string;
   phaseId: string | null;
   predecessorId: string | null;
+  predecessorType: DependencyType;
+  successorId: string | null;
+  successorType: DependencyType;
   startDate: string;
   duration: number;
   dueDate: string;
@@ -42,6 +49,12 @@ interface PersonFormState {
 }
 
 const DEFAULT_DURATION_DAYS = 7;
+
+const DEPENDENCY_TYPE_OPTIONS: Array<{ value: DependencyType; label: string }> = [
+  { value: 'finish_to_start', label: 'Finish to Start (FS)' },
+  { value: 'start_to_start', label: 'Start to Start (SS)' },
+  { value: 'finish_to_finish', label: 'Finish to Finish (FF)' },
+];
 
 const toDateInputValue = (value?: Date | null) => {
   if (!value) return '';
@@ -64,7 +77,10 @@ const buildDefaultTaskState = (
   nodeType: NodeType,
   node?: Node | null,
   initialPhaseId?: string | null,
-  predecessorId?: string | null
+  predecessorId?: string | null,
+  predecessorType?: DependencyType | null,
+  successorId?: string | null,
+  successorType?: DependencyType | null
 ): TaskFormState => {
   if (node) {
     const start = node.data.startDate ? toDateInputValue(node.data.startDate) : '';
@@ -72,7 +88,7 @@ const buildDefaultTaskState = (
     const duration =
       node.data.durationDays ??
       (node.data.startDate && node.data.dueDate
-        ? Math.max(1, differenceInCalendarDays(node.data.dueDate, node.data.startDate))
+        ? Math.max(0, differenceInCalendarDays(node.data.dueDate, node.data.startDate))
         : DEFAULT_DURATION_DAYS);
 
   const existingPhase = project.phases.find(phase => phase.nodeIds.includes(node.id));
@@ -81,6 +97,9 @@ const buildDefaultTaskState = (
       title: node.title,
       phaseId: existingPhase?.id ?? null,
       predecessorId: predecessorId ?? null,
+      predecessorType: predecessorType ?? 'finish_to_start',
+      successorId: successorId ?? null,
+      successorType: successorType ?? 'finish_to_start',
       startDate: start,
       duration,
       dueDate: due,
@@ -99,6 +118,9 @@ const buildDefaultTaskState = (
     title: '',
     phaseId: initialPhaseId ?? null,
     predecessorId: predecessorId ?? null,
+    predecessorType: predecessorType ?? 'finish_to_start',
+    successorId: successorId ?? null,
+    successorType: successorType ?? 'finish_to_start',
     startDate: toDateInputValue(today),
     duration: DEFAULT_DURATION_DAYS,
     dueDate: toDateInputValue(due),
@@ -135,6 +157,88 @@ const deriveInitials = (title: string) => {
   return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
 };
 
+const calculateDatesFromPredecessor = (
+  predecessor: { startDate?: Date; dueDate?: Date },
+  dependencyType: DependencyType,
+  duration: number
+): { startDate: Date; dueDate: Date } | null => {
+  if (!predecessor.startDate || !predecessor.dueDate) {
+    return null;
+  }
+
+  const predecessorStart = predecessor.startDate;
+  const predecessorEnd = predecessor.dueDate;
+  
+  let newStartDate: Date;
+  let newDueDate: Date;
+  
+  switch (dependencyType) {
+    case 'finish_to_start':
+      // Current task starts when predecessor finishes
+      newStartDate = addDays(predecessorEnd, 1);
+      newDueDate = addDays(newStartDate, duration - 1);
+      break;
+      
+    case 'start_to_start':
+      // Current task starts when predecessor starts
+      newStartDate = predecessorStart;
+      newDueDate = addDays(newStartDate, duration - 1);
+      break;
+      
+    case 'finish_to_finish':
+      // Current task finishes when predecessor finishes
+      newDueDate = predecessorEnd;
+      newStartDate = addDays(newDueDate, -(duration - 1));
+      break;
+      
+    default:
+      return null;
+  }
+  
+  return { startDate: newStartDate, dueDate: newDueDate };
+};
+
+const calculateDatesFromSuccessor = (
+  successor: { startDate?: Date; dueDate?: Date },
+  dependencyType: DependencyType,
+  duration: number
+): { startDate: Date; dueDate: Date } | null => {
+  if (!successor.startDate || !successor.dueDate) {
+    return null;
+  }
+
+  const successorStart = successor.startDate;
+  const successorEnd = successor.dueDate;
+  
+  let newStartDate: Date;
+  let newDueDate: Date;
+  
+  switch (dependencyType) {
+    case 'finish_to_start':
+      // Current task finishes before successor starts
+      newDueDate = addDays(successorStart, -1);
+      newStartDate = addDays(newDueDate, -(duration - 1));
+      break;
+      
+    case 'start_to_start':
+      // Current task starts when successor starts
+      newStartDate = successorStart;
+      newDueDate = addDays(newStartDate, duration - 1);
+      break;
+      
+    case 'finish_to_finish':
+      // Current task finishes when successor finishes
+      newDueDate = successorEnd;
+      newStartDate = addDays(newDueDate, -(duration - 1));
+      break;
+      
+    default:
+      return null;
+  }
+  
+  return { startDate: newStartDate, dueDate: newDueDate };
+};
+
 const NodeDialog: React.FC<NodeDialogProps> = ({
   isOpen,
   mode,
@@ -144,11 +248,23 @@ const NodeDialog: React.FC<NodeDialogProps> = ({
   initialPosition,
   initialPhaseId,
   currentPredecessorId,
+  currentPredecessorType,
+  currentSuccessorId,
+  currentSuccessorType,
   onClose,
   onSubmit,
 }) => {
   const [taskState, setTaskState] = useState<TaskFormState>(() =>
-    buildDefaultTaskState(project, nodeType, node, initialPhaseId, currentPredecessorId)
+    buildDefaultTaskState(
+      project,
+      nodeType,
+      node,
+      initialPhaseId,
+      currentPredecessorId,
+      currentPredecessorType,
+      currentSuccessorId,
+      currentSuccessorType
+    )
   );
   const [personState, setPersonState] = useState<PersonFormState>(() =>
     buildDefaultPersonState(node)
@@ -156,10 +272,31 @@ const NodeDialog: React.FC<NodeDialogProps> = ({
 
   useEffect(() => {
     if (isOpen) {
-      setTaskState(buildDefaultTaskState(project, nodeType, node, initialPhaseId, currentPredecessorId));
+      setTaskState(
+        buildDefaultTaskState(
+          project,
+          nodeType,
+          node,
+          initialPhaseId,
+          currentPredecessorId,
+          currentPredecessorType,
+          currentSuccessorId,
+          currentSuccessorType
+        )
+      );
       setPersonState(buildDefaultPersonState(node));
     }
-  }, [isOpen, project, nodeType, node, initialPhaseId, currentPredecessorId]);
+  }, [
+    isOpen,
+    project,
+    nodeType,
+    node,
+    initialPhaseId,
+    currentPredecessorId,
+    currentPredecessorType,
+    currentSuccessorId,
+    currentSuccessorType,
+  ]);
 
   const dialogTitle = useMemo(() => {
     const verb = mode === 'create' ? 'Create' : 'Edit';
@@ -173,7 +310,7 @@ const NodeDialog: React.FC<NodeDialogProps> = ({
   }, [mode, nodeType]);
 
   const availablePhases = project.phases;
-  const availablePredecessors = useMemo(() => {
+  const dependencyCandidates = useMemo(() => {
     return project.nodes
       .filter(candidate => {
         if (node && candidate.id === node.id) return false;
@@ -183,9 +320,12 @@ const NodeDialog: React.FC<NodeDialogProps> = ({
         id: candidate.id,
         title: candidate.title,
         type: candidate.type,
+        startDate: candidate.data.startDate,
         dueDate: candidate.data.dueDate,
       }));
   }, [project.nodes, node]);
+  const availablePredecessors = dependencyCandidates;
+  const availableSuccessors = dependencyCandidates;
 
   if (!isOpen) {
     return null;
@@ -194,7 +334,7 @@ const NodeDialog: React.FC<NodeDialogProps> = ({
   const handleStartDateChange = (value: string) => {
     setTaskState(prev => {
       const start = parseInputDate(value);
-      if (start && prev.duration > 0) {
+      if (start) {
         const newDue = addDays(start, prev.duration);
         return {
           ...prev,
@@ -207,7 +347,8 @@ const NodeDialog: React.FC<NodeDialogProps> = ({
   };
 
   const handleDurationChange = (value: string) => {
-    const duration = Math.max(1, Number.parseInt(value, 10) || DEFAULT_DURATION_DAYS);
+    const parsed = Number.parseInt(value, 10);
+    const duration = Number.isNaN(parsed) ? 0 : Math.max(0, parsed);
     setTaskState(prev => {
       const start = parseInputDate(prev.startDate);
       if (start) {
@@ -227,7 +368,14 @@ const NodeDialog: React.FC<NodeDialogProps> = ({
       const start = parseInputDate(prev.startDate);
       const due = parseInputDate(value);
       if (start && due) {
-        const duration = Math.max(1, differenceInCalendarDays(due, start));
+        if (due.getTime() < start.getTime()) {
+          return {
+            ...prev,
+            dueDate: toDateInputValue(start),
+            duration: 0,
+          };
+        }
+        const duration = Math.max(0, differenceInCalendarDays(due, start));
         return { ...prev, dueDate: value, duration };
       }
       return { ...prev, dueDate: value };
@@ -236,21 +384,109 @@ const NodeDialog: React.FC<NodeDialogProps> = ({
 
   const handlePredecessorChange = (value: string) => {
     setTaskState(prev => {
-      const predecessor = availablePredecessors.find(candidate => candidate.id === value);
-      if (predecessor && predecessor.dueDate) {
-        const start = addDays(predecessor.dueDate, 0);
-        const newDue = addDays(start, prev.duration);
-        return {
-          ...prev,
-          predecessorId: value,
-          startDate: toDateInputValue(start),
-          dueDate: toDateInputValue(newDue),
-        };
-      }
-      return {
+      const newState = {
         ...prev,
         predecessorId: value === '' ? null : value,
       };
+      
+      // Auto-adjust dates based on predecessor
+      if (value && prev.predecessorType) {
+        const predecessor = availablePredecessors.find(p => p.id === value);
+        if (predecessor && predecessor.dueDate) {
+          const adjustedDates = calculateDatesFromPredecessor(
+            predecessor,
+            prev.predecessorType,
+            prev.duration
+          );
+          if (adjustedDates) {
+            newState.startDate = toDateInputValue(adjustedDates.startDate);
+            newState.dueDate = toDateInputValue(adjustedDates.dueDate);
+          }
+        }
+      }
+      
+      return newState;
+    });
+  };
+
+  const handlePredecessorTypeChange = (value: DependencyType) => {
+    setTaskState(prev => {
+      const newState = {
+        ...prev,
+        predecessorType: value,
+      };
+      
+      // Auto-adjust dates based on predecessor type change
+      if (prev.predecessorId) {
+        const predecessor = availablePredecessors.find(p => p.id === prev.predecessorId);
+        if (predecessor && predecessor.dueDate) {
+          const adjustedDates = calculateDatesFromPredecessor(
+            predecessor,
+            value,
+            prev.duration
+          );
+          if (adjustedDates) {
+            newState.startDate = toDateInputValue(adjustedDates.startDate);
+            newState.dueDate = toDateInputValue(adjustedDates.dueDate);
+          }
+        }
+      }
+      
+      return newState;
+    });
+  };
+
+  const handleSuccessorChange = (value: string) => {
+    setTaskState(prev => {
+      const newState = {
+        ...prev,
+        successorId: value === '' ? null : value,
+      };
+      
+      // Auto-adjust dates based on successor
+      if (value && prev.successorType) {
+        const successor = availableSuccessors.find(s => s.id === value);
+        if (successor && successor.startDate) {
+          const adjustedDates = calculateDatesFromSuccessor(
+            successor,
+            prev.successorType,
+            prev.duration
+          );
+          if (adjustedDates) {
+            newState.startDate = toDateInputValue(adjustedDates.startDate);
+            newState.dueDate = toDateInputValue(adjustedDates.dueDate);
+          }
+        }
+      }
+      
+      return newState;
+    });
+  };
+
+  const handleSuccessorTypeChange = (value: DependencyType) => {
+    setTaskState(prev => {
+      const newState = {
+        ...prev,
+        successorType: value,
+      };
+      
+      // Auto-adjust dates based on successor type change
+      if (prev.successorId) {
+        const successor = availableSuccessors.find(s => s.id === prev.successorId);
+        if (successor && successor.startDate) {
+          const adjustedDates = calculateDatesFromSuccessor(
+            successor,
+            value,
+            prev.duration
+          );
+          if (adjustedDates) {
+            newState.startDate = toDateInputValue(adjustedDates.startDate);
+            newState.dueDate = toDateInputValue(adjustedDates.dueDate);
+          }
+        }
+      }
+      
+      return newState;
     });
   };
 
@@ -286,7 +522,8 @@ const NodeDialog: React.FC<NodeDialogProps> = ({
       onSubmit({
         node: updatedNode,
         selectedPhaseId: null,
-        predecessorId: null,
+        predecessor: null,
+        successor: null,
       });
       return;
     }
@@ -328,7 +565,12 @@ const NodeDialog: React.FC<NodeDialogProps> = ({
     onSubmit({
       node: updatedNode,
       selectedPhaseId: taskState.phaseId,
-      predecessorId: taskState.predecessorId,
+      predecessor: taskState.predecessorId
+        ? { nodeId: taskState.predecessorId, type: taskState.predecessorType }
+        : null,
+      successor: taskState.successorId
+        ? { nodeId: taskState.successorId, type: taskState.successorType }
+        : null,
     });
   };
 
@@ -346,45 +588,79 @@ const NodeDialog: React.FC<NodeDialogProps> = ({
         />
       </div>
 
-      <div>
-        <label className="block text-sm font-medium text-slate-700 mb-1">
-          Phase (Optional)
-        </label>
-        <select
-          value={taskState.phaseId ?? ''}
-          onChange={(e) =>
-            setTaskState(prev => ({
-              ...prev,
-              phaseId: e.target.value === '' ? null : e.target.value,
-            }))
-          }
-          className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-        >
-          <option value="">No phase</option>
-          {availablePhases.map(phase => (
-            <option key={phase.id} value={phase.id}>
-              {phase.title}
-            </option>
-          ))}
-        </select>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <label className="block text-sm font-medium text-slate-700 mb-1">
+            Predecessor (Optional)
+          </label>
+          <select
+            value={taskState.predecessorId ?? ''}
+            onChange={(e) => handlePredecessorChange(e.target.value)}
+            className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            <option value="">No predecessor</option>
+            {availablePredecessors.map(predecessor => (
+              <option key={predecessor.id} value={predecessor.id}>
+                {predecessor.title}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-slate-700 mb-1">
+            Predecessor Link Type
+          </label>
+          <select
+            value={taskState.predecessorType}
+            onChange={(e) => handlePredecessorTypeChange(e.target.value as DependencyType)}
+            className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-slate-100 disabled:text-slate-500"
+            disabled={!taskState.predecessorId}
+          >
+            {DEPENDENCY_TYPE_OPTIONS.map(option => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </div>
       </div>
 
-      <div>
-        <label className="block text-sm font-medium text-slate-700 mb-1">
-          Predecessor (Optional)
-        </label>
-        <select
-          value={taskState.predecessorId ?? ''}
-          onChange={(e) => handlePredecessorChange(e.target.value)}
-          className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-        >
-          <option value="">No predecessor</option>
-          {availablePredecessors.map(predecessor => (
-            <option key={predecessor.id} value={predecessor.id}>
-              {predecessor.title}
-            </option>
-          ))}
-        </select>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <label className="block text-sm font-medium text-slate-700 mb-1">
+            Successor (Optional)
+          </label>
+          <select
+            value={taskState.successorId ?? ''}
+            onChange={(e) => handleSuccessorChange(e.target.value)}
+            className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            <option value="">No successor</option>
+            {availableSuccessors.map(successor => (
+              <option key={successor.id} value={successor.id}>
+                {successor.title}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-slate-700 mb-1">
+            Successor Link Type
+          </label>
+          <select
+            value={taskState.successorType}
+            onChange={(e) => handleSuccessorTypeChange(e.target.value as DependencyType)}
+            className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-slate-100 disabled:text-slate-500"
+            disabled={!taskState.successorId}
+          >
+            {DEPENDENCY_TYPE_OPTIONS.map(option => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -401,7 +677,7 @@ const NodeDialog: React.FC<NodeDialogProps> = ({
           <label className="block text-sm font-medium text-slate-700 mb-1">Duration (days)</label>
           <input
             type="number"
-            min={1}
+            min={0}
             value={taskState.duration}
             onChange={(e) => handleDurationChange(e.target.value)}
             className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -425,39 +701,38 @@ const NodeDialog: React.FC<NodeDialogProps> = ({
       </div>
 
       {nodeType !== 'milestone' && (
-        <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1">Status</label>
-          <select
-            value={taskState.status}
-            onChange={(e) =>
-              setTaskState(prev => ({ ...prev, status: e.target.value as TaskStatus }))
-            }
-            className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-          >
-            <option value="not_started">Not Started</option>
-            <option value="in_progress">In Progress</option>
-            <option value="blocked">Blocked</option>
-            <option value="done">Done</option>
-          </select>
-        </div>
-      )}
-
-      {nodeType !== 'milestone' && (
-        <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1">Progress (%)</label>
-          <input
-            type="number"
-            min={0}
-            max={100}
-            value={taskState.progress}
-            onChange={(e) =>
-              setTaskState(prev => ({
-                ...prev,
-                progress: clampNumber(Number.parseInt(e.target.value, 10) || 0, 0, 100),
-              }))
-            }
-            className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Status</label>
+            <select
+              value={taskState.status}
+              onChange={(e) =>
+                setTaskState(prev => ({ ...prev, status: e.target.value as TaskStatus }))
+              }
+              className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="not_started">Not Started</option>
+              <option value="in_progress">In Progress</option>
+              <option value="blocked">Blocked</option>
+              <option value="done">Done</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Progress (%)</label>
+            <input
+              type="number"
+              min={0}
+              max={100}
+              value={taskState.progress}
+              onChange={(e) =>
+                setTaskState(prev => ({
+                  ...prev,
+                  progress: clampNumber(Number.parseInt(e.target.value, 10) || 0, 0, 100),
+                }))
+              }
+              className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
         </div>
       )}
 

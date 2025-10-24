@@ -4,7 +4,7 @@ import NodeComponent from './NodeComponent';
 import EdgeComponent from './EdgeComponent';
 import CanvasToolbar from './CanvasToolbar';
 import { getNodeById } from '../utils/projectUtils';
-import { formatPhaseDateRange, getPhaseBackgroundColor, getPhaseDateRange } from '../utils/phaseUtils';
+import { formatPhaseDateRange, getNodesInPhase, getPhaseBackgroundColor, getPhaseDateRange } from '../utils/phaseUtils';
 import PhaseComponent from './PhaseComponent';
 
 interface CanvasProps {
@@ -336,13 +336,21 @@ const Canvas: React.FC<CanvasProps> = ({
 
   // Handle node resize
   const handleNodeResize = useCallback((nodeId: string, width: number, height: number) => {
+    const updatedNodes = project.nodes.map(node =>
+      node.id === nodeId
+        ? { ...node, width, height }
+        : node
+    );
+
+    const updatedPhases = project.phases.map(phase => ({
+      ...phase,
+      nodeIds: getNodesInPhase(phase, updatedNodes),
+    }));
+
     onProjectChange({
       ...project,
-      nodes: project.nodes.map(node =>
-        node.id === nodeId
-          ? { ...node, width, height }
-          : node
-      ),
+      nodes: updatedNodes,
+      phases: updatedPhases,
       updatedAt: new Date(),
     });
   }, [project, onProjectChange]);
@@ -355,13 +363,26 @@ const Canvas: React.FC<CanvasProps> = ({
         }
       : newPosition;
 
+    const updatedPhases = project.phases.map(phase => {
+      if (phase.id === phaseId) {
+        const updatedPhase = {
+          ...phase,
+          position: snapPosition,
+        };
+        return {
+          ...updatedPhase,
+          nodeIds: getNodesInPhase(updatedPhase, project.nodes),
+        };
+      }
+      return {
+        ...phase,
+        nodeIds: getNodesInPhase(phase, project.nodes),
+      };
+    });
+
     onProjectChange({
       ...project,
-      phases: project.phases.map(phase =>
-        phase.id === phaseId
-          ? { ...phase, position: snapPosition }
-          : phase
-      ),
+      phases: updatedPhases,
       updatedAt: new Date(),
     });
   }, [snapToGrid, gridSize, project, onProjectChange]);
@@ -381,17 +402,27 @@ const Canvas: React.FC<CanvasProps> = ({
         }
       : rect.size;
 
+    const updatedPhases = project.phases.map(phase => {
+      if (phase.id === phaseId) {
+        const updatedPhase = {
+          ...phase,
+          position: snappedPosition,
+          size: snappedSize,
+        };
+        return {
+          ...updatedPhase,
+          nodeIds: getNodesInPhase(updatedPhase, project.nodes),
+        };
+      }
+      return {
+        ...phase,
+        nodeIds: getNodesInPhase(phase, project.nodes),
+      };
+    });
+
     onProjectChange({
       ...project,
-      phases: project.phases.map(phase =>
-        phase.id === phaseId
-          ? {
-              ...phase,
-              position: snappedPosition,
-              size: snappedSize,
-            }
-          : phase
-      ),
+      phases: updatedPhases,
       updatedAt: new Date(),
     });
   }, [snapToGrid, gridSize, project, onProjectChange]);
@@ -465,13 +496,21 @@ const Canvas: React.FC<CanvasProps> = ({
         y: Math.round(newPosition.y / gridSize) * gridSize,
       } : newPosition;
 
+      const updatedNodes = project.nodes.map(node =>
+        node.id === nodeId
+          ? { ...node, position: snapPosition }
+          : node
+      );
+
+      const updatedPhases = project.phases.map(phase => ({
+        ...phase,
+        nodeIds: getNodesInPhase(phase, updatedNodes),
+      }));
+
       onProjectChange({
         ...project,
-        nodes: project.nodes.map(node =>
-          node.id === nodeId
-            ? { ...node, position: snapPosition }
-            : node
-        ),
+        nodes: updatedNodes,
+        phases: updatedPhases,
         updatedAt: new Date(),
       });
     }

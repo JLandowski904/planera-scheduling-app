@@ -9,9 +9,25 @@ import AppLayout from '../components/Layout/AppLayout';
 import NodeDialog from '../components/NodeDialog';
 import PhaseDialog from '../components/PhaseDialog';
 import { projectsAPI, ProjectData } from '../services/api';
-import { Project, ViewType, Node, NodeType, Phase, Edge } from '../types';
+import { Project, ViewType, Node, NodeType, Phase, Edge, DependencyType } from '../types';
 import { createDefaultProject } from '../utils/projectUtils';
-import { DEFAULT_PHASE_COLOR, getNodesBoundingBox, removeNodeIdsFromPhases } from '../utils/phaseUtils';
+import { DEFAULT_PHASE_COLOR, getNodesBoundingBox, getNodesInPhase, removeNodeIdsFromPhases } from '../utils/phaseUtils';
+import { getDependencyConflicts } from '../utils/schedulingUtils';
+
+const applyEdgeConflictState = (project: Project): Project => {
+  const dependencyConflicts = getDependencyConflicts(project.nodes, project.edges);
+  const blockedEdgeIds = new Set(
+    dependencyConflicts.map(conflict => conflict.edgeId).filter((edgeId): edgeId is string => Boolean(edgeId))
+  );
+
+  return {
+    ...project,
+    edges: project.edges.map(edge => ({
+      ...edge,
+      isBlocked: blockedEdgeIds.has(edge.id),
+    })),
+  };
+};
 
 const coerceOptionalDate = (value: unknown): Date | undefined => {
   if (!value) return undefined;
@@ -144,6 +160,10 @@ const ProjectView: React.FC = () => {
     initialPhaseId?: string | null;
     predecessorId?: string | null;
     predecessorEdgeId?: string | null;
+    predecessorType?: DependencyType | null;
+    successorId?: string | null;
+    successorEdgeId?: string | null;
+    successorType?: DependencyType | null;
   }>({
     isOpen: false,
     mode: 'create',
@@ -152,6 +172,10 @@ const ProjectView: React.FC = () => {
     initialPhaseId: null,
     predecessorId: null,
     predecessorEdgeId: null,
+    predecessorType: null,
+    successorId: null,
+    successorEdgeId: null,
+    successorType: null,
   });
   const [phaseDialogState, setPhaseDialogState] = useState<{
     isOpen: boolean;
@@ -170,7 +194,7 @@ const ProjectView: React.FC = () => {
       setLoading(true);
       const response = await projectsAPI.getById(projectId!);
       const normalizedProject = normalizeProjectResponse(response.project);
-      setProject(normalizedProject);
+      setProject(applyEdgeConflictState(normalizedProject));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load project');
       console.error('Load project error:', err);
@@ -180,10 +204,11 @@ const ProjectView: React.FC = () => {
   };
 
   const handleProjectChange = useCallback(async (updatedProject: Project) => {
-    setProject(updatedProject);
+    const projectWithConflicts = applyEdgeConflictState(updatedProject);
+    setProject(projectWithConflicts);
     // Save to server asynchronously
     try {
-      await projectsAPI.update(projectId!, updatedProject);
+      await projectsAPI.update(projectId!, projectWithConflicts);
     } catch (err) {
       console.error('Failed to save project:', err);
     }
@@ -212,6 +237,10 @@ const ProjectView: React.FC = () => {
       initialPhaseId: suggestedPhaseId,
       predecessorId: suggestedPredecessor,
       predecessorEdgeId: null,
+      predecessorType: suggestedPredecessor ? 'finish_to_start' : null,
+      successorId: null,
+      successorEdgeId: null,
+      successorType: null,
     });
   }, [project, selectedPhases, selectedNodes]);
 
@@ -227,6 +256,7 @@ const ProjectView: React.FC = () => {
 
     const containingPhase = project.phases.find(phase => phase.nodeIds.includes(nodeId));
     const existingPredecessorEdge = project.edges.find(edge => edge.target === nodeId);
+    const existingSuccessorEdge = project.edges.find(edge => edge.source === nodeId);
 
     setNodeDialogState({
       isOpen: true,
@@ -237,6 +267,10 @@ const ProjectView: React.FC = () => {
       initialPhaseId: containingPhase?.id ?? null,
       predecessorId: existingPredecessorEdge?.source ?? null,
       predecessorEdgeId: existingPredecessorEdge?.id ?? null,
+      predecessorType: existingPredecessorEdge?.type ?? null,
+      successorId: existingSuccessorEdge?.target ?? null,
+      successorEdgeId: existingSuccessorEdge?.id ?? null,
+      successorType: existingSuccessorEdge?.type ?? null,
     });
   }, [project]);
 
@@ -277,13 +311,21 @@ const ProjectView: React.FC = () => {
       nodeIds = selectedNodeEntities.map(node => node.id);
     }
 
-    const newPhase: Phase = {
+    const initialPhase: Phase = {
       id: phaseId,
       title: 'New Phase',
       position,
       size,
       color: DEFAULT_PHASE_COLOR,
       nodeIds,
+    };
+
+    const autoDetectedNodeIds = getNodesInPhase(initialPhase, project.nodes);
+    const combinedNodeIds = Array.from(new Set([...nodeIds, ...autoDetectedNodeIds]));
+
+    const newPhase: Phase = {
+      ...initialPhase,
+      nodeIds: combinedNodeIds,
     };
 
     const updatedProject: Project = {
@@ -573,16 +615,24 @@ const ProjectView: React.FC = () => {
           initialPosition={nodeDialogState.initialPosition}
           initialPhaseId={nodeDialogState.initialPhaseId ?? undefined}
           currentPredecessorId={nodeDialogState.predecessorId ?? undefined}
+          currentPredecessorType={nodeDialogState.predecessorType ?? undefined}
+          currentSuccessorId={nodeDialogState.successorId ?? undefined}
+          currentSuccessorType={nodeDialogState.successorType ?? undefined}
           onClose={() =>
             setNodeDialogState(prev => ({
               ...prev,
               isOpen: false,
             }))
           }
-          onSubmit={({ node: submittedNode, selectedPhaseId, predecessorId }) => {
+          onSubmit={({ node: submittedNode, selectedPhaseId, predecessor, successor }) => {
             if (!project) {
               return;
             }
+
+            const requestedPredecessorId = predecessor?.nodeId ?? null;
+            const requestedPredecessorType = predecessor?.type ?? null;
+            const requestedSuccessorId = successor?.nodeId ?? null;
+            const requestedSuccessorType = successor?.type ?? null;
 
             let updatedNodes: Node[];
             if (nodeDialogState.mode === 'edit' && nodeDialogState.node) {
@@ -593,18 +643,15 @@ const ProjectView: React.FC = () => {
               updatedNodes = [...project.nodes, submittedNode];
             }
 
-            let updatedPhases: Phase[] = project.phases.map(phase => {
-              const withoutNode = phase.nodeIds.filter(id => id !== submittedNode.id);
-              return { ...phase, nodeIds: withoutNode };
-            });
+            let updatedPhases: Phase[] = project.phases.map(phase => ({
+              ...phase,
+              nodeIds: getNodesInPhase(phase, updatedNodes),
+            }));
 
             if (selectedPhaseId) {
               updatedPhases = updatedPhases.map(phase => {
-                if (phase.id === selectedPhaseId) {
-                  const nodeIds = phase.nodeIds.includes(submittedNode.id)
-                    ? phase.nodeIds
-                    : [...phase.nodeIds, submittedNode.id];
-                  return { ...phase, nodeIds };
+                if (phase.id === selectedPhaseId && !phase.nodeIds.includes(submittedNode.id)) {
+                  return { ...phase, nodeIds: [...phase.nodeIds, submittedNode.id] };
                 }
                 return phase;
               });
@@ -613,41 +660,101 @@ const ProjectView: React.FC = () => {
             let updatedEdges: Edge[] = [...project.edges];
             const currentPredecessorEdgeId = nodeDialogState.predecessorEdgeId;
             const currentPredecessorId = nodeDialogState.predecessorId;
+            const currentSuccessorEdgeId = nodeDialogState.successorEdgeId;
+            const currentSuccessorId = nodeDialogState.successorId;
 
-            if (nodeDialogState.mode === 'edit' && currentPredecessorEdgeId && currentPredecessorId !== predecessorId) {
-              updatedEdges = updatedEdges.filter(edge => edge.id !== currentPredecessorEdgeId);
+            const edgeSelections: string[] = [];
+            const generateEdgeId = () => `edge-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+            if (nodeDialogState.mode === 'edit' && currentPredecessorEdgeId) {
+              if (!requestedPredecessorId || requestedPredecessorId !== currentPredecessorId) {
+                updatedEdges = updatedEdges.filter(edge => edge.id !== currentPredecessorEdgeId);
+              }
             }
 
-            let addedEdgeId: string | null = null;
+            const desiredPredecessorType: DependencyType = requestedPredecessorType ?? 'finish_to_start';
 
-            if (predecessorId && predecessorId !== currentPredecessorId) {
-              const newEdge: Edge = {
-                id: `edge-${Date.now()}`,
-                source: predecessorId,
-                target: submittedNode.id,
-                type: 'finish_to_start',
-              };
-              updatedEdges = [...updatedEdges, newEdge];
-              addedEdgeId = newEdge.id;
-            } else if (predecessorId && currentPredecessorEdgeId) {
-              addedEdgeId = currentPredecessorEdgeId;
+            if (requestedPredecessorId) {
+              const existingEdge = updatedEdges.find(
+                edge => edge.source === requestedPredecessorId && edge.target === submittedNode.id
+              );
+
+              if (existingEdge) {
+                if (existingEdge.type !== desiredPredecessorType) {
+                  updatedEdges = updatedEdges.map(edge =>
+                    edge.id === existingEdge.id ? { ...edge, type: desiredPredecessorType } : edge
+                  );
+                }
+                edgeSelections.push(existingEdge.id);
+              } else {
+                const newEdge: Edge = {
+                  id: generateEdgeId(),
+                  source: requestedPredecessorId,
+                  target: submittedNode.id,
+                  type: desiredPredecessorType,
+                };
+                updatedEdges = [...updatedEdges, newEdge];
+                edgeSelections.push(newEdge.id);
+              }
             }
+
+            if (nodeDialogState.mode === 'edit' && currentSuccessorEdgeId) {
+              if (!requestedSuccessorId || requestedSuccessorId !== currentSuccessorId) {
+                updatedEdges = updatedEdges.filter(edge => edge.id !== currentSuccessorEdgeId);
+              }
+            }
+
+            const desiredSuccessorType: DependencyType = requestedSuccessorType ?? 'finish_to_start';
+
+            if (requestedSuccessorId) {
+              const existingEdge = updatedEdges.find(
+                edge => edge.source === submittedNode.id && edge.target === requestedSuccessorId
+              );
+
+              if (existingEdge) {
+                if (existingEdge.type !== desiredSuccessorType) {
+                  updatedEdges = updatedEdges.map(edge =>
+                    edge.id === existingEdge.id ? { ...edge, type: desiredSuccessorType } : edge
+                  );
+                }
+                edgeSelections.push(existingEdge.id);
+              } else {
+                const newEdge: Edge = {
+                  id: generateEdgeId(),
+                  source: submittedNode.id,
+                  target: requestedSuccessorId,
+                  type: desiredSuccessorType,
+                };
+                updatedEdges = [...updatedEdges, newEdge];
+                edgeSelections.push(newEdge.id);
+              }
+            }
+
+            const dependencyMap = new Map<string, string[]>();
+            updatedEdges.forEach(edge => {
+              if (!dependencyMap.has(edge.target)) {
+                dependencyMap.set(edge.target, []);
+              }
+              dependencyMap.get(edge.target)!.push(edge.id);
+            });
 
             updatedNodes = updatedNodes.map(existing => {
-              if (existing.id === submittedNode.id) {
-                const dependencyEdgeIds = updatedEdges
-                  .filter(edge => edge.target === submittedNode.id)
-                  .map(edge => edge.id);
-                return {
-                  ...submittedNode,
-                  data: {
-                    ...submittedNode.data,
-                    dependencies: dependencyEdgeIds.length > 0 ? dependencyEdgeIds : undefined,
-                  },
-                };
+              const dependencies = dependencyMap.get(existing.id);
+              const nextData = { ...existing.data };
+
+              if (dependencies && dependencies.length > 0) {
+                nextData.dependencies = dependencies;
+              } else {
+                delete nextData.dependencies;
               }
-              return existing;
+
+              return {
+                ...existing,
+                data: nextData,
+              };
             });
+
+            const selectedEdgeIds = Array.from(new Set(edgeSelections));
 
             const updatedProject: Project = {
               ...project,
@@ -659,8 +766,11 @@ const ProjectView: React.FC = () => {
 
             handleProjectChange(updatedProject);
             setSelectedNodes([submittedNode.id]);
-            setSelectedEdges(addedEdgeId ? [addedEdgeId] : []);
-            setSelectedPhases(selectedPhaseId ? [selectedPhaseId] : []);
+            setSelectedEdges(selectedEdgeIds);
+            const containingPhaseIds = updatedPhases
+              .filter(phase => phase.nodeIds.includes(submittedNode.id))
+              .map(phase => phase.id);
+            setSelectedPhases(containingPhaseIds);
 
             setNodeDialogState(prev => ({
               ...prev,

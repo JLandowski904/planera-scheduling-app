@@ -1,4 +1,4 @@
-# Setup Instructions for Planera Scheduling App
+# Setup Instructions for plandango Scheduling App
 
 ## Prerequisites
 
@@ -29,10 +29,10 @@ docker pull node:22-alpine
 
 ```bash
 # Build the Docker image
-docker build -t planera-app .
+docker build -t plandango-app .
 
 # Run the container
-docker run -p 3000:3000 -v $(pwd):/app planera-app
+docker run -p 3000:3000 -v $(pwd):/app plandango-app
 ```
 
 Or use the provided docker-compose file:
@@ -92,8 +92,8 @@ docker run -it --rm -v $(pwd):/app -w /app node:22-alpine sh
 
 2. **Or Build and Run Manually**:
    ```bash
-   docker build -t planera-app .
-   docker run -p 3000:3000 planera-app
+   docker build -t plandango-app .
+   docker run -p 3000:3000 plandango-app
    ```
 
 ### Method C: Interactive Docker Development
@@ -145,7 +145,7 @@ If you prefer Yarn over npm:
 
 3. **Container won't start**:
    - Solution: Check if port 3000 is available: `docker ps`
-   - Try a different port: `docker run -p 3001:3000 planera-app`
+   - Try a different port: `docker run -p 3001:3000 plandango-app`
 
 4. **File changes not reflected in container**:
    - Solution: Use the docker-compose.yml file which includes volume mounting

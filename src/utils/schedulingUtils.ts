@@ -1,5 +1,5 @@
 import { Project, Node, Edge, DependencyType } from '../types';
-import { addDays, differenceInDays, isAfter, isBefore } from 'date-fns';
+import { addDays, differenceInDays, isAfter } from 'date-fns';
 
 export interface SchedulingResult {
   updatedNodes: Node[];
@@ -7,6 +7,7 @@ export interface SchedulingResult {
     type: 'date_conflict' | 'circular_dependency' | 'over_allocation';
     message: string;
     nodeIds: string[];
+    edgeId?: string;
   }>;
 }
 
@@ -144,6 +145,68 @@ const calculateDependentDates = (
   return { startDate: newStartDate, dueDate: newDueDate };
 };
 
+export interface DependencyConflictDetail {
+  edgeId: string;
+  sourceId: string;
+  targetId: string;
+  message: string;
+}
+
+export const getDependencyConflicts = (
+  nodes: Node[],
+  edges: Edge[]
+): DependencyConflictDetail[] => {
+  const conflicts: DependencyConflictDetail[] = [];
+  const nodeLookup = new Map(nodes.map(node => [node.id, node]));
+
+  edges.forEach(edge => {
+    const sourceNode = nodeLookup.get(edge.source);
+    const targetNode = nodeLookup.get(edge.target);
+    if (!sourceNode || !targetNode) {
+      return;
+    }
+
+    const sourceStart = sourceNode.data.startDate;
+    const sourceDue = sourceNode.data.dueDate;
+    const targetStart = targetNode.data.startDate;
+    const targetDue = targetNode.data.dueDate;
+
+    const addConflict = (message: string) => {
+      conflicts.push({
+        edgeId: edge.id,
+        sourceId: edge.source,
+        targetId: edge.target,
+        message,
+      });
+    };
+
+    switch (edge.type) {
+      case 'finish_to_start': {
+        if (sourceDue && targetStart && sourceDue.getTime() > targetStart.getTime()) {
+          addConflict(`${targetNode.title} starts before ${sourceNode.title} finishes`);
+        }
+        break;
+      }
+      case 'start_to_start': {
+        if (sourceStart && targetStart && sourceStart.getTime() > targetStart.getTime()) {
+          addConflict(`${targetNode.title} starts before ${sourceNode.title} starts`);
+        }
+        break;
+      }
+      case 'finish_to_finish': {
+        if (sourceDue && targetDue && sourceDue.getTime() > targetDue.getTime()) {
+          addConflict(`${targetNode.title} finishes before ${sourceNode.title} finishes`);
+        }
+        break;
+      }
+      default:
+        break;
+    }
+  });
+
+  return conflicts;
+};
+
 /**
  * Detect date conflicts in the project
  */
@@ -152,53 +215,17 @@ export const detectDateConflicts = (
   edges: Edge[]
 ): SchedulingResult['conflicts'] => {
   const conflicts: SchedulingResult['conflicts'] = [];
-  
-  edges.forEach(edge => {
-    const sourceNode = nodes.find(n => n.id === edge.source);
-    const targetNode = nodes.find(n => n.id === edge.target);
-    
-    if (!sourceNode || !targetNode) return;
-    
-    // Check for date conflicts based on dependency type
-    switch (edge.type) {
-      case 'finish_to_start':
-        if (sourceNode.data.dueDate && targetNode.data.startDate) {
-          if (isAfter(sourceNode.data.dueDate, targetNode.data.startDate)) {
-            conflicts.push({
-              type: 'date_conflict',
-              message: `${sourceNode.title} ends after ${targetNode.title} starts`,
-              nodeIds: [edge.source, edge.target]
-            });
-          }
-        }
-        break;
-        
-      case 'start_to_start':
-        if (sourceNode.data.startDate && targetNode.data.startDate) {
-          if (isAfter(sourceNode.data.startDate, targetNode.data.startDate)) {
-            conflicts.push({
-              type: 'date_conflict',
-              message: `${sourceNode.title} starts after ${targetNode.title} starts`,
-              nodeIds: [edge.source, edge.target]
-            });
-          }
-        }
-        break;
-        
-      case 'finish_to_finish':
-        if (sourceNode.data.dueDate && targetNode.data.dueDate) {
-          if (isAfter(sourceNode.data.dueDate, targetNode.data.dueDate)) {
-            conflicts.push({
-              type: 'date_conflict',
-              message: `${sourceNode.title} ends after ${targetNode.title} ends`,
-              nodeIds: [edge.source, edge.target]
-            });
-          }
-        }
-        break;
-    }
+  const dependencyConflicts = getDependencyConflicts(nodes, edges);
+
+  dependencyConflicts.forEach(conflict => {
+    conflicts.push({
+      type: 'date_conflict',
+      message: conflict.message,
+      nodeIds: [conflict.sourceId, conflict.targetId],
+      edgeId: conflict.edgeId,
+    });
   });
-  
+
   return conflicts;
 };
 
@@ -352,7 +379,7 @@ export const autoScheduleProject = (project: Project): SchedulingResult => {
         });
         
         // Set start date and calculate end date
-        const duration = node.data.durationDays || 5; // Default 5 days
+        const duration = node.data.durationDays ?? 5; // Default 5 days
         const startDate = latestFinishDate;
         const dueDate = addDays(startDate, duration - 1);
         

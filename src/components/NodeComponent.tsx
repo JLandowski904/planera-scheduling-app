@@ -302,10 +302,16 @@ const NodeComponent: React.FC<NodeComponentProps> = ({
   };
 
   const renderDeliverableInfo = () => {
-    if (type === 'deliverable' && data.dueDate) {
+    if (type === 'deliverable' && (data.startDate || data.dueDate)) {
       return (
         <div className="text-xs mt-1 text-left">
-          <span>{formatDate(data.dueDate)}</span>
+          {data.startDate && data.dueDate ? (
+            <span>{formatDate(data.startDate)} - {formatDate(data.dueDate)}</span>
+          ) : data.dueDate ? (
+            <span>{formatDate(data.dueDate)}</span>
+          ) : data.startDate ? (
+            <span>{formatDate(data.startDate)}</span>
+          ) : null}
         </div>
       );
     }

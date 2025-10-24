@@ -1,8 +1,8 @@
-# Planera - Construction Scheduling App - Project Summary
+# plandango - Construction Scheduling App - Project Summary
 
 ## 🎯 Project Overview
 
-I have successfully built a comprehensive whiteboard-style scheduling application for design/construction projects, similar to Planera. The application is built with React, TypeScript, and Tailwind CSS, providing a modern, intuitive interface for project management.
+I have successfully built a comprehensive whiteboard-style scheduling application for design/construction projects, similar to plandango. The application is built with React, TypeScript, and Tailwind CSS, providing a modern, intuitive interface for project management.
 
 ## ✅ Completed Features
 
@@ -220,7 +220,7 @@ The app starts with a sample "Subdivision – Oak Ridge" project including:
 
 ## 🏆 Conclusion
 
-The Planera Construction Scheduling App is a fully functional, production-ready application that meets all specified requirements. It provides an intuitive whiteboard interface for construction project management with advanced scheduling capabilities, conflict detection, and multiple view modes. The application is built with modern web technologies and follows best practices for maintainability and extensibility.
+The plandango Construction Scheduling App is a fully functional, production-ready application that meets all specified requirements. It provides an intuitive whiteboard interface for construction project management with advanced scheduling capabilities, conflict detection, and multiple view modes. The application is built with modern web technologies and follows best practices for maintainability and extensibility.
 
 The app successfully demonstrates:
 - Complex state management with React hooks

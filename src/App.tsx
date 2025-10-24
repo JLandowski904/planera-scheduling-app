@@ -6,12 +6,19 @@ import ProjectView from './pages/ProjectView';
 import { authAPI } from './services/api';
 import './App.css';
 
+const getHasToken = () => {
+  if (typeof window === 'undefined') {
+    return false;
+  }
+  return Boolean(localStorage.getItem('authToken'));
+};
+
 const App: React.FC = () => {
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => getHasToken());
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const token = localStorage.getItem('authToken');
+    const token = getHasToken();
 
     if (!token) {
       setIsAuthenticated(false);
@@ -45,6 +52,29 @@ const App: React.FC = () => {
       isMounted = false;
     };
   }, []);
+
+  useEffect(() => {
+    const handleAuthChanged = (event: Event) => {
+      const custom = event as CustomEvent<{ isAuthenticated?: boolean }>;
+      if (typeof custom.detail?.isAuthenticated === 'boolean') {
+        setIsAuthenticated(custom.detail.isAuthenticated);
+        if (loading) {
+          setLoading(false);
+        }
+      } else {
+        const hasToken = getHasToken();
+        setIsAuthenticated(hasToken);
+        if (loading) {
+          setLoading(false);
+        }
+      }
+    };
+
+    window.addEventListener('planner:auth-changed', handleAuthChanged);
+    return () => {
+      window.removeEventListener('planner:auth-changed', handleAuthChanged);
+    };
+  }, [loading]);
 
   if (loading) {
     return (

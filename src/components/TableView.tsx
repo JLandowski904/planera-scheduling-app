@@ -1,5 +1,5 @@
 import React, { useMemo, useState, useCallback } from 'react';
-import { Project, Node, TaskStatus, Priority } from '../types';
+import { Project, TaskStatus, Priority } from '../types';
 import { format } from 'date-fns';
 import { 
   Calendar, 
@@ -9,7 +9,6 @@ import {
   AlertTriangle,
   ChevronUp,
   ChevronDown,
-  Filter,
   Search,
 } from 'lucide-react';
 
@@ -20,7 +19,7 @@ interface TableViewProps {
   onNodeSelect: (nodeId: string, multiSelect?: boolean) => void;
 }
 
-type SortField = 'title' | 'type' | 'status' | 'priority' | 'startDate' | 'dueDate' | 'discipline' | 'assignees';
+type SortField = 'title' | 'type' | 'phase' | 'status' | 'priority' | 'startDate' | 'dueDate' | 'discipline' | 'assignees';
 type SortDirection = 'asc' | 'desc';
 
 const TableView: React.FC<TableViewProps> = ({
@@ -35,6 +34,27 @@ const TableView: React.FC<TableViewProps> = ({
   const [filterStatus, setFilterStatus] = useState<TaskStatus | 'all'>('all');
   const [filterType, setFilterType] = useState<string>('all');
   const [filterPhase, setFilterPhase] = useState<string>('all');
+
+  const nodePhaseTitles = useMemo(() => {
+    const map = new Map<string, string[]>();
+
+    project.nodes.forEach(node => {
+      map.set(node.id, []);
+    });
+
+    project.phases.forEach(phase => {
+      phase.nodeIds.forEach(nodeId => {
+        const entry = map.get(nodeId);
+        if (entry) {
+          entry.push(phase.title);
+        } else {
+          map.set(nodeId, [phase.title]);
+        }
+      });
+    });
+
+    return map;
+  }, [project.nodes, project.phases]);
 
   // Filter and sort nodes
   const filteredAndSortedNodes = useMemo(() => {
@@ -81,6 +101,13 @@ const TableView: React.FC<TableViewProps> = ({
           aValue = a.type;
           bValue = b.type;
           break;
+        case 'phase': {
+          const aPhases = (nodePhaseTitles.get(a.id) ?? []).slice().sort();
+          const bPhases = (nodePhaseTitles.get(b.id) ?? []).slice().sort();
+          aValue = aPhases.join(' | ');
+          bValue = bPhases.join(' | ');
+          break;
+        }
         case 'status':
           aValue = a.data.status || 'not_started';
           bValue = b.data.status || 'not_started';
@@ -115,7 +142,7 @@ const TableView: React.FC<TableViewProps> = ({
     });
 
     return filtered;
-  }, [project.nodes, searchTerm, filterStatus, filterType, sortField, sortDirection, filterPhase, project.phases]);
+  }, [project.nodes, searchTerm, filterStatus, filterType, sortField, sortDirection, filterPhase, project.phases, nodePhaseTitles]);
 
   const handleSort = useCallback((field: SortField) => {
     if (sortField === field) {
@@ -297,6 +324,15 @@ const TableView: React.FC<TableViewProps> = ({
               </th>
               <th 
                 className="table-header cursor-pointer hover:bg-gray-100"
+                onClick={() => handleSort('phase')}
+              >
+                <div className="flex items-center gap-1">
+                  Phase
+                  {getSortIcon('phase')}
+                </div>
+              </th>
+              <th 
+                className="table-header cursor-pointer hover:bg-gray-100"
                 onClick={() => handleSort('status')}
               >
                 <div className="flex items-center gap-1">
@@ -386,6 +422,14 @@ const TableView: React.FC<TableViewProps> = ({
                   <span className="capitalize">{node.type}</span>
                 </td>
                 <td className="table-cell">
+                  {(() => {
+                    const phases = nodePhaseTitles.get(node.id) ?? [];
+                    if (phases.length === 0) return '-';
+                    if (phases.length === 1) return phases[0];
+                    return `${phases[0]} +${phases.length - 1}`;
+                  })()}
+                </td>
+                <td className="table-cell">
                   {getStatusBadge(node.data.status)}
                 </td>
                 <td className="table-cell">
@@ -448,5 +492,3 @@ const TableView: React.FC<TableViewProps> = ({
 };
 
 export default TableView;
-
-

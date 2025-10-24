@@ -17,7 +17,7 @@ Deploy your construction scheduling app to production with Supabase backend and 
    - Click "New Project"
    - Choose organization (or create one)
    - Project details:
-     - **Name**: `planera-scheduling` (or your choice)
+     - **Name**: `plandango-scheduling` (or your choice)
      - **Database Password**: Generate strong password (save it!)
      - **Region**: Choose closest to your users
    - Click "Create new project"
@@ -78,13 +78,13 @@ Deploy your construction scheduling app to production with Supabase backend and 
 2. **Create GitHub Repository**
    - Go to [github.com](https://github.com)
    - Click "New repository"
-   - Name: `planera-scheduling-app` (or your choice)
+   - Name: `plandango-scheduling-app` (or your choice)
    - Make it **Public** (required for Vercel free tier)
    - Don't initialize with README (you already have one)
 
 3. **Push to GitHub**
    ```bash
-   git remote add origin https://github.com/yourusername/planera-scheduling-app.git
+   git remote add origin https://github.com/yourusername/plandango-scheduling-app.git
    git branch -M main
    git push -u origin main
    ```
@@ -109,7 +109,7 @@ Deploy your construction scheduling app to production with Supabase backend and 
 
 1. **Import Project**
    - Click "New Project"
-   - Find your `planera-scheduling-app` repository
+   - Find your `plandango-scheduling-app` repository
    - Click "Import"
 
 2. **Configure Build Settings**
@@ -132,7 +132,7 @@ Deploy your construction scheduling app to production with Supabase backend and 
 4. **Deploy**
    - Click "Deploy"
    - Wait 2-3 minutes for build
-   - Get your live URL (e.g., `https://planera-scheduling-app.vercel.app`)
+   - Get your live URL (e.g., `https://plandango-scheduling-app.vercel.app`)
 
 ### 3.3 Configure Supabase for Production
 **Time: 5 minutes**
@@ -158,7 +158,7 @@ Deploy your construction scheduling app to production with Supabase backend and 
 
 2. **Search and Purchase**
    - Search for available domains
-   - Choose something memorable (e.g., `planera.app`, `myprojects.com`)
+   - Choose something memorable (e.g., `plandango.app`, `myprojects.com`)
    - Complete purchase and verify account
 
 ### 4.2 Connect Domain to Vercel

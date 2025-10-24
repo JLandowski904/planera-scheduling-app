@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from '../lib/simpleRouter';
-import { LogIn, UserPlus } from 'lucide-react';
+import { LogIn } from 'lucide-react';
 import { authAPI } from '../services/api';
 
 const Login: React.FC = () => {
@@ -8,6 +8,7 @@ const Login: React.FC = () => {
   const [isSignup, setIsSignup] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [info, setInfo] = useState('');
 
   const [formData, setFormData] = useState({
     email: '',
@@ -35,20 +36,35 @@ const Login: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    setInfo('');
     setLoading(true);
 
     try {
       if (isSignup) {
-        const response = await authAPI.signup({
+        await authAPI.signup({
           email: formData.email,
           username: formData.username,
           password: formData.password,
           displayName: formData.displayName
         });
-        // Supabase handles session storage automatically
-        navigate('/projects');
+
+        try {
+          await authAPI.logout();
+        } catch (logoutError) {
+          console.warn('Failed to clear session after signup', logoutError);
+        }
+
+        setIsSignup(false);
+        setInfo('Account created successfully. Please sign in.');
+        setFormData({
+          email: formData.email,
+          password: '',
+          username: '',
+          displayName: ''
+        });
+        navigate('/');
       } else {
-        const response = await authAPI.login({
+        await authAPI.login({
           email: formData.email,
           password: formData.password
         });
@@ -75,6 +91,12 @@ const Login: React.FC = () => {
         <h2 className="text-xl font-semibold text-gray-800 mb-6">
           {isSignup ? 'Create Account' : 'Welcome Back'}
         </h2>
+
+        {info && (
+          <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg text-sm text-green-700">
+            {info}
+          </div>
+        )}
 
         {error && (
           <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-600">
@@ -160,6 +182,7 @@ const Login: React.FC = () => {
             onClick={() => {
               setIsSignup(!isSignup);
               setError('');
+              setInfo('');
             }}
             className="w-full text-sm text-gray-600 hover:text-gray-900 transition"
           >
@@ -172,4 +195,3 @@ const Login: React.FC = () => {
 };
 
 export default Login;
-

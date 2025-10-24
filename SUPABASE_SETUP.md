@@ -8,7 +8,7 @@ This guide will help you set up your construction scheduling app with Supabase f
 2. Click "New Project"
 3. Choose your organization (or create one)
 4. Fill in project details:
-   - **Name**: `planera-scheduling` (or your preferred name)
+   - **Name**: `plandango-scheduling` (or your preferred name)
    - **Database Password**: Generate a strong password and save it
    - **Region**: Choose the region closest to your users
 5. Click "Create new project"

@@ -145,6 +145,7 @@ export interface ConflictWarning {
   type: 'circular_dependency' | 'over_allocation' | 'deliverable_conflict' | 'date_conflict';
   message: string;
   nodeIds: string[];
+  edgeId?: string;
   severity: 'warning' | 'error';
 }
 

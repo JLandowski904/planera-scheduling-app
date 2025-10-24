@@ -161,11 +161,23 @@ const persistSession = () => {
   }
 }
 
+const emitAuthChange = (isAuthenticated: boolean) => {
+  if (typeof window === 'undefined' || typeof window.dispatchEvent !== 'function') {
+    return
+  }
+  window.dispatchEvent(
+    new CustomEvent('planner:auth-changed', {
+      detail: { isAuthenticated },
+    })
+  )
+}
+
 const updateUserCache = (user: User, token: string) => {
   const storage = getStorage()
   if (!storage) return
   storage.setItem('authToken', token)
   storage.setItem('user', JSON.stringify(user))
+  emitAuthChange(true)
 }
 
 const clearUserCache = () => {
@@ -173,6 +185,7 @@ const clearUserCache = () => {
   if (!storage) return
   storage.removeItem('authToken')
   storage.removeItem('user')
+  emitAuthChange(false)
 }
 
 const normalizeEmail = (email: string): string => email.trim().toLowerCase()

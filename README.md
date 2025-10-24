@@ -1,4 +1,4 @@
-# Planera - Construction Scheduling App
+# plandango - Construction Scheduling App
 
 A whiteboard-style scheduling application for design and construction projects, built with React and TypeScript.
 
@@ -67,7 +67,7 @@ A whiteboard-style scheduling application for design and construction projects, 
 1. Clone the repository:
 ```bash
 git clone <repository-url>
-cd planera-scheduling-app
+cd plandango-scheduling-app
 ```
 
 2. Install dependencies:

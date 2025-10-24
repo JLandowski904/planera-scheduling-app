@@ -2,6 +2,7 @@ import React, { useMemo } from 'react';
 import { Project, ConflictWarning } from '../types';
 import { X, AlertTriangle, Clock, Users, Calendar, CheckCircle } from 'lucide-react';
 import { detectCircularDependencies } from '../utils/projectUtils';
+import { getDependencyConflicts } from '../utils/schedulingUtils';
 
 interface ConflictPanelProps {
   project: Project;
@@ -30,7 +31,7 @@ const ConflictPanel: React.FC<ConflictPanelProps> = ({ project, onClose }) => {
     
     project.nodes.forEach(node => {
       if (node.type === 'task' && node.data.assignees) {
-        const duration = node.data.durationDays || 1;
+        const duration = node.data.durationDays ?? 1;
         node.data.assignees.forEach(assigneeId => {
           if (!personWorkloads.has(assigneeId)) {
             personWorkloads.set(assigneeId, { tasks: [], totalHours: 0 });
@@ -80,22 +81,16 @@ const ConflictPanel: React.FC<ConflictPanelProps> = ({ project, onClose }) => {
       }
     });
 
-    // Detect date conflicts (predecessor ends after successor starts)
-    project.edges.forEach(edge => {
-      const sourceNode = project.nodes.find(n => n.id === edge.source);
-      const targetNode = project.nodes.find(n => n.id === edge.target);
-      
-      if (sourceNode?.data.dueDate && targetNode?.data.startDate) {
-        if (sourceNode.data.dueDate > targetNode.data.startDate) {
-          warnings.push({
-            id: `date-conflict-${edge.id}`,
-            type: 'date_conflict',
-            message: `${sourceNode.title} ends after ${targetNode.title} starts`,
-            nodeIds: [edge.source, edge.target],
-            severity: 'error',
-          });
-        }
-      }
+    const dependencyConflicts = getDependencyConflicts(project.nodes, project.edges);
+    dependencyConflicts.forEach(conflict => {
+      warnings.push({
+        id: `date-conflict-${conflict.edgeId}`,
+        type: 'date_conflict',
+        message: conflict.message,
+        nodeIds: [conflict.sourceId, conflict.targetId],
+        edgeId: conflict.edgeId,
+        severity: 'error',
+      });
     });
 
     return warnings;
@@ -258,4 +253,3 @@ const ConflictPanel: React.FC<ConflictPanelProps> = ({ project, onClose }) => {
 };
 
 export default ConflictPanel;
-

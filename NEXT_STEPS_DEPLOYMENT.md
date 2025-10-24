@@ -15,7 +15,7 @@ git commit -m "Initial commit with Supabase migration"
 ### 1.2 Create GitHub Repository
 1. Go to [github.com](https://github.com)
 2. Click "New repository"
-3. Name it: `planera-scheduling-app` (or your choice)
+3. Name it: `plandango-scheduling-app` (or your choice)
 4. Make it **Public** (required for Vercel free tier)
 5. Don't initialize with README (you already have files)
 6. Click "Create repository"
@@ -23,7 +23,7 @@ git commit -m "Initial commit with Supabase migration"
 ### 1.3 Push to GitHub
 ```bash
 # Add your GitHub repository as remote
-git remote add origin https://github.com/YOUR_USERNAME/planera-scheduling-app.git
+git remote add origin https://github.com/YOUR_USERNAME/plandango-scheduling-app.git
 
 # Push your code
 git branch -M main
@@ -35,7 +35,7 @@ git push -u origin main
 ### 2.1 Import Project in Vercel
 1. Go to [vercel.com](https://vercel.com) and sign in
 2. Click "New Project"
-3. Find your `planera-scheduling-app` repository
+3. Find your `plandango-scheduling-app` repository
 4. Click "Import"
 
 ### 2.2 Configure Build Settings
@@ -63,7 +63,7 @@ git push -u origin main
 ### 2.4 Deploy
 1. Click "Deploy"
 2. Wait 2-3 minutes for build to complete
-3. You'll get a URL like: `https://planera-scheduling-app.vercel.app`
+3. You'll get a URL like: `https://plandango-scheduling-app.vercel.app`
 
 ## Step 3: Configure Supabase for Production (5 minutes)
 
