@@ -127,6 +127,27 @@
     padding: 4px;
     margin-bottom: 4px;
   }
+
+  /* Completed node styles */
+  .node-completed {
+    opacity: 0.6 !important;
+    background-color: #f3f4f6 !important;
+    border-color: #9ca3af !important;
+    color: #6b7280 !important;
+  }
+
+  .node-completed .task-icon,
+  .node-completed .milestone-icon,
+  .node-completed .deliverable-icon,
+  .node-completed .person-icon {
+    background-color: #9ca3af !important;
+    color: #6b7280 !important;
+  }
+
+  .node-completed::before,
+  .node-completed::after {
+    background-color: #9ca3af !important;
+  }
   
   .node-selected {
     @apply ring-2 ring-blue-500 ring-offset-2;

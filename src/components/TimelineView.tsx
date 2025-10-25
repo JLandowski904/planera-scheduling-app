@@ -158,9 +158,9 @@ const TimelineView: React.FC<TimelineViewProps> = ({
   };
 
   return (
-    <div className="h-full flex flex-col bg-slate-50">
+    <div className="timeline-view h-full flex flex-col bg-slate-50">
       {/* Timeline filters */}
-      <div className="bg-white border-b border-slate-200 p-4">
+      <div className="bg-white border-b border-slate-200 p-4 no-print">
         <div className="flex items-center gap-4">
           <label className="text-sm font-medium text-gray-700">Filter by Phase:</label>
           <select
@@ -350,4 +350,3 @@ const TimelineView: React.FC<TimelineViewProps> = ({
 };
 
 export default TimelineView;
-

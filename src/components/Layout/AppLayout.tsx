@@ -11,7 +11,7 @@ interface AppLayoutProps {
 
 const AppLayout: React.FC<AppLayoutProps> = ({ children, currentView, onViewChange }) => {
   return (
-    <div className="min-h-screen flex w-full bg-slate-50">
+    <div className="app-shell min-h-screen flex w-full bg-slate-50">
       <AppSidebar currentView={currentView} onViewChange={onViewChange} />
       
       <main className="flex-1 flex flex-col overflow-hidden">
@@ -26,6 +26,8 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children, currentView, onViewChan
 };
 
 export default AppLayout;
+
+
 
 
 

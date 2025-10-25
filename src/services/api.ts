@@ -1,576 +1,418 @@
-const STORAGE_KEY = 'planner_local_db_v1'
-const SESSION_KEY = 'planner_local_session_v1'
-
-const DEFAULT_PROJECT_DATA = {
-  nodes: [],
-  edges: [],
-  phases: [],
-  viewSettings: {
-    currentView: 'whiteboard',
-    zoom: 1,
-    pan: { x: 0, y: 0 },
-    snapToGrid: true,
-    gridSize: 20,
-    showGrid: true,
-  },
-  filters: {
-    types: [],
-    statuses: [],
-    assignees: [],
-    disciplines: [],
-    tags: [],
-    phases: [],
-    blockedOnly: false,
-    customPresets: [],
-  },
+export interface SignupData {
+  email: string;
+  username: string;
+  password: string;
+  displayName?: string;
 }
 
-const getStorage = (): Storage | null => {
-  if (typeof window === 'undefined') {
-    return null
-  }
-
-  try {
-    return window.localStorage
-  } catch {
-    return null
-  }
+export interface LoginData {
+  email: string;
+  password: string;
 }
 
-const nowIso = (): string => new Date().toISOString()
-
-const generateId = (): string => {
-  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
-    return crypto.randomUUID()
-  }
-  return `id_${Math.random().toString(36).slice(2)}_${Date.now().toString(36)}`
+export interface User {
+  id: string;
+  email: string;
+  username: string;
+  displayName: string;
+  status?: string;
+  createdAt?: string;
+  updatedAt?: string;
+  lastLoginAt?: string | null;
 }
 
-const clone = <T>(value: T): T => {
-  if (value === null || value === undefined) {
-    return value
-  }
-  return JSON.parse(JSON.stringify(value))
+export interface ProjectAccess {
+  role: 'owner' | 'editor' | 'viewer';
+  status: 'active' | 'invited' | string;
 }
 
-interface StoredUser {
-  id: string
-  email: string
-  emailLower: string
-  username: string
-  displayName: string
-  password: string
-  createdAt: string
-  updatedAt: string
+export interface ProjectMember {
+  id: string;
+  username: string;
+  displayName: string;
+  email: string;
+  role: string;
+  status: string;
+  joinedAt?: string;
+  invitedAt?: string | null;
+  acceptedAt?: string | null;
 }
 
-interface StoredProjectMember {
-  userId: string
-  role: string
-  joinedAt: string
+export interface ProjectData {
+  id: string;
+  name: string;
+  description?: string;
+  ownerId: string;
+  ownerName?: string;
+  createdAt?: string;
+  updatedAt?: string;
+  projectData?: any;
+  access?: ProjectAccess;
 }
 
-interface StoredProject {
-  id: string
-  name: string
-  description: string
-  ownerId: string
-  createdAt: string
-  updatedAt: string
-  projectData: any
-  members: StoredProjectMember[]
+export interface ProjectInvitation {
+  id: string;
+  projectId: string;
+  email: string;
+  role: string;
+  status: string;
+  invitedAt: string;
+  token: string;
+  name: string;
+  description?: string;
+  ownerName?: string;
 }
 
-interface DatabaseState {
-  users: Record<string, StoredUser>
-  projects: Record<string, StoredProject>
+export interface ProjectActivityItem {
+  id: string;
+  projectId: string;
+  userId: string;
+  action: string;
+  entityType?: string | null;
+  entityId?: string | null;
+  details?: Record<string, unknown> | null;
+  metadata?: Record<string, unknown> | null;
+  timestamp: string;
+  actor: {
+    displayName: string;
+    username: string;
+  };
 }
 
-interface SessionState {
-  userId: string
-  accessToken: string
+export interface ProjectComment {
+  id: string;
+  projectId: string;
+  nodeId?: string | null;
+  authorId: string;
+  body: string;
+  type: string;
+  createdAt: string;
+  updatedAt: string;
+  author: {
+    displayName: string;
+    username: string;
+  };
 }
 
-const defaultState = (): DatabaseState => ({
-  users: {},
-  projects: {},
-})
+type Json = Record<string, unknown> | Array<unknown> | string | number | boolean | null;
 
-const loadState = (): DatabaseState => {
-  const storage = getStorage()
-  if (!storage) {
-    return defaultState()
-  }
-
-  const raw = storage.getItem(STORAGE_KEY)
-  if (!raw) {
-    const initial = defaultState()
-    storage.setItem(STORAGE_KEY, JSON.stringify(initial))
-    return initial
-  }
-
-  try {
-    const parsed = JSON.parse(raw) as DatabaseState
-    return {
-      users: parsed.users || {},
-      projects: parsed.projects || {},
-    }
-  } catch {
-    const reset = defaultState()
-    storage.setItem(STORAGE_KEY, JSON.stringify(reset))
-    return reset
-  }
-}
-
-const loadSession = (): SessionState | null => {
-  const storage = getStorage()
-  if (!storage) {
-    return null
-  }
-
-  const raw = storage.getItem(SESSION_KEY)
-  if (!raw) {
-    return null
-  }
-
-  try {
-    return JSON.parse(raw) as SessionState
-  } catch {
-    storage.removeItem(SESSION_KEY)
-    return null
-  }
-}
-
-let dbState: DatabaseState = loadState()
-let sessionState: SessionState | null = loadSession()
-const persistState = () => {
-  const storage = getStorage()
-  if (storage) {
-    storage.setItem(STORAGE_KEY, JSON.stringify(dbState))
-  }
-}
-
-const persistSession = () => {
-  const storage = getStorage()
-  if (storage) {
-    if (sessionState) {
-      storage.setItem(SESSION_KEY, JSON.stringify(sessionState))
-    } else {
-      storage.removeItem(SESSION_KEY)
-    }
-  }
-}
+const AUTH_TOKEN_KEY = 'authToken';
+const USER_STORAGE_KEY = 'user';
+const DEFAULT_API_BASE = process.env.REACT_APP_API_BASE_URL || 'http://localhost:5000';
+const API_BASE_URL = DEFAULT_API_BASE.replace(/\/$/, '');
 
 const emitAuthChange = (isAuthenticated: boolean) => {
   if (typeof window === 'undefined' || typeof window.dispatchEvent !== 'function') {
-    return
+    return;
   }
   window.dispatchEvent(
     new CustomEvent('planner:auth-changed', {
       detail: { isAuthenticated },
     })
-  )
-}
+  );
+};
 
-const updateUserCache = (user: User, token: string) => {
-  const storage = getStorage()
-  if (!storage) return
-  storage.setItem('authToken', token)
-  storage.setItem('user', JSON.stringify(user))
-  emitAuthChange(true)
-}
-
-const clearUserCache = () => {
-  const storage = getStorage()
-  if (!storage) return
-  storage.removeItem('authToken')
-  storage.removeItem('user')
-  emitAuthChange(false)
-}
-
-const normalizeEmail = (email: string): string => email.trim().toLowerCase()
-
-const getUserByEmail = (email: string): StoredUser | undefined => {
-  const normalized = normalizeEmail(email)
-  return Object.values(dbState.users).find(user => user.emailLower === normalized)
-}
-
-const getUserById = (userId: string): StoredUser | undefined => dbState.users[userId]
-
-const ensureProject = (projectId: string): StoredProject => {
-  const project = dbState.projects[projectId]
-  if (!project) {
-    throw new Error('Project not found')
-  }
-  return project
-}
-
-const ensureOwnerMember = (project: StoredProject) => {
-  const hasOwner = project.members.some(member => member.userId === project.ownerId)
-  if (!hasOwner) {
-    project.members.unshift({
-      userId: project.ownerId,
-      role: 'owner',
-      joinedAt: project.createdAt,
-    })
-  }
-}
-
-const createSessionForUser = (user: StoredUser) => {
-  const token = `local_${generateId()}`
-  sessionState = {
-    userId: user.id,
-    accessToken: token,
-  }
-  persistSession()
-
-  const publicSession = {
-    access_token: token,
-    token_type: 'bearer',
-    expires_in: 0,
-    expires_at: 0,
-    refresh_token: token,
-    user: {
-      id: user.id,
-      email: user.email,
-    },
+const getStorage = (): Storage | null => {
+  if (typeof window === 'undefined') {
+    return null;
   }
 
-  const publicUser: User = {
+  try {
+    return window.localStorage;
+  } catch {
+    return null;
+  }
+};
+
+const getAuthToken = (): string | null => {
+  const storage = getStorage();
+  return storage?.getItem(AUTH_TOKEN_KEY) ?? null;
+};
+
+const setAuthToken = (token: string) => {
+  const storage = getStorage();
+  if (!storage) return;
+  storage.setItem(AUTH_TOKEN_KEY, token);
+  emitAuthChange(true);
+};
+
+const clearAuthToken = () => {
+  const storage = getStorage();
+  if (!storage) return;
+  storage.removeItem(AUTH_TOKEN_KEY);
+  emitAuthChange(false);
+};
+
+const cacheUser = (user: User) => {
+  const storage = getStorage();
+  if (!storage) return;
+  storage.setItem(USER_STORAGE_KEY, JSON.stringify(user));
+};
+
+const getCachedUser = (): User | null => {
+  const storage = getStorage();
+  if (!storage) return null;
+  const raw = storage.getItem(USER_STORAGE_KEY);
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw) as User;
+  } catch {
+    storage.removeItem(USER_STORAGE_KEY);
+    return null;
+  }
+};
+
+const clearCachedUser = () => {
+  const storage = getStorage();
+  if (!storage) return;
+  storage.removeItem(USER_STORAGE_KEY);
+};
+
+const parseResponse = async (response: Response) => {
+  const text = await response.text();
+  if (!text) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(text);
+  } catch {
+    return text;
+  }
+};
+
+interface RequestOptions {
+  method?: string;
+  body?: Json | FormData;
+  headers?: Record<string, string>;
+  auth?: boolean;
+}
+
+const apiFetch = async <T = any>(
+  path: string,
+  { method = 'GET', body, headers = {}, auth = true }: RequestOptions = {}
+): Promise<T> => {
+  const requestHeaders = new Headers(headers);
+  const config: RequestInit = {
+    method,
+    headers: requestHeaders,
+  };
+
+  const isFormData = typeof FormData !== 'undefined' && body instanceof FormData;
+
+  if (body !== undefined) {
+    if (!isFormData && typeof body !== 'string') {
+      requestHeaders.set('Content-Type', 'application/json');
+      config.body = JSON.stringify(body);
+    } else {
+      config.body = body as BodyInit;
+    }
+  }
+
+  if (auth) {
+    const token = getAuthToken();
+    if (!token) {
+      throw new Error('You must be signed in to continue.');
+    }
+    requestHeaders.set('Authorization', `Bearer ${token}`);
+  }
+
+  const response = await fetch(`${API_BASE_URL}${path}`, config);
+
+  const payload = await parseResponse(response);
+  if (!response.ok) {
+    const message =
+      (payload && typeof payload === 'object' && 'error' in payload && payload.error) ||
+      (payload && typeof payload === 'object' && 'message' in payload && payload.message) ||
+      response.statusText ||
+      'Request failed';
+    throw new Error(String(message));
+  }
+
+  return payload as T;
+};
+
+const buildSession = (token: string, user: User) => ({
+  access_token: token,
+  token_type: 'bearer',
+  user: {
     id: user.id,
     email: user.email,
-    username: user.username,
-    displayName: user.displayName,
-  }
-
-  updateUserCache(publicUser, token)
-
-  return {
-    session: publicSession,
-    user: publicUser,
-  }
-}
-
-const getCurrentUser = (): StoredUser | null => {
-  if (!sessionState) return null
-  const user = getUserById(sessionState.userId)
-  if (!user) {
-    sessionState = null
-    persistSession()
-    clearUserCache()
-    return null
-  }
-  return user
-}
-
-const requireAuthenticatedUser = (): StoredUser => {
-  const user = getCurrentUser()
-  if (!user) {
-    throw new Error('Not authenticated')
-  }
-  return user
-}
-
-const projectToProjectData = (project: StoredProject): ProjectData => {
-  ensureOwnerMember(project)
-  const owner = getUserById(project.ownerId)
-  const members = project.members.map(member => ({
-    userId: member.userId,
-    role: member.role,
-  }))
-
-  return {
-    id: project.id,
-    name: project.name,
-    description: project.description || undefined,
-    ownerId: project.ownerId,
-    ownerName: owner?.displayName || owner?.username || owner?.email || '',
-    createdAt: project.createdAt,
-    updatedAt: project.updatedAt,
-    projectData: clone(project.projectData),
-    members,
-  }
-}
-
-export interface LoginData {
-  email: string
-  password: string
-}
-
-export interface SignupData {
-  email: string
-  username: string
-  password: string
-  displayName?: string
-}
-
-export interface User {
-  id: string
-  email: string
-  username: string
-  displayName: string
-}
-
-export interface ProjectMember {
-  userId: string
-  role: string
-}
-
-export interface ProjectData {
-  id: string
-  name: string
-  description?: string
-  ownerId: string
-  ownerName?: string
-  createdAt?: string
-  updatedAt?: string
-  projectData?: any
-  members?: ProjectMember[]
-}
-
-export const authAPI = {
-  signup: async (data: SignupData) => {
-    const emailLower = normalizeEmail(data.email)
-    if (getUserByEmail(emailLower)) {
-      throw new Error('Email already in use')
-    }
-
-    const id = generateId()
-    const timestamp = nowIso()
-
-    const storedUser: StoredUser = {
-      id,
-      email: data.email.trim(),
-      emailLower,
-      username: data.username.trim(),
-      displayName: data.displayName?.trim() || data.username.trim(),
-      password: data.password,
-      createdAt: timestamp,
-      updatedAt: timestamp,
-    }
-
-    dbState.users[id] = storedUser
-    persistState()
-
-    const { user, session } = createSessionForUser(storedUser)
-
-    return {
-      user,
-      session,
-    }
   },
+});
 
-  login: async (data: LoginData) => {
-    const user = getUserByEmail(data.email)
-    if (!user || user.password !== data.password) {
-      throw new Error('Invalid email or password')
-    }
+const normalizeEmail = (value: string) => value.trim().toLowerCase();
 
-    const { user: publicUser, session } = createSessionForUser(user)
-
-    return {
-      user: publicUser,
-      session,
-    }
-  },
-
-  getMe: async () => {
-    const user = requireAuthenticatedUser()
-    return {
-      user: {
-        id: user.id,
-        email: user.email,
-        username: user.username,
-        displayName: user.displayName,
+const authAPIImpl = {
+  async signup(data: SignupData) {
+    const payload = await apiFetch<{ user: User; token: string }>('/api/auth/signup', {
+      method: 'POST',
+      body: {
+        email: normalizeEmail(data.email),
+        username: data.username.trim(),
+        password: data.password,
+        displayName: data.displayName?.trim(),
       },
-    }
-  },
+      auth: false,
+    });
 
-  logout: async () => {
-    sessionState = null
-    persistSession()
-    clearUserCache()
-  },
-
-  getSession: async () => {
-    if (!sessionState) {
-      return null
-    }
-
-    const user = getUserById(sessionState.userId)
-    if (!user) {
-      sessionState = null
-      persistSession()
-      clearUserCache()
-      return null
-    }
+    setAuthToken(payload.token);
+    cacheUser(payload.user);
 
     return {
-      access_token: sessionState.accessToken,
-      token_type: 'bearer',
-      expires_in: 0,
-      expires_at: 0,
-      refresh_token: sessionState.accessToken,
-      user: {
-        id: user.id,
-        email: user.email,
+      user: payload.user,
+      session: buildSession(payload.token, payload.user),
+    };
+  },
+
+  async login(data: LoginData) {
+    const payload = await apiFetch<{ user: User; token: string }>('/api/auth/login', {
+      method: 'POST',
+      body: {
+        email: normalizeEmail(data.email),
+        password: data.password,
       },
-    }
-  },
-}
+      auth: false,
+    });
 
-export const projectsAPI = {
-  getAll: async () => {
-    const projects = Object.values(dbState.projects)
-      .sort((a, b) => {
-        if (!a.updatedAt && !b.updatedAt) return 0
-        if (!a.updatedAt) return 1
-        if (!b.updatedAt) return -1
-        return b.updatedAt.localeCompare(a.updatedAt)
-      })
-      .map(project => projectToProjectData(project))
-
-    return { projects }
-  },
-
-  getById: async (projectId: string) => {
-    const project = ensureProject(projectId)
-    return {
-      project: projectToProjectData(project),
-    }
-  },
-
-  create: async (name: string, description?: string) => {
-    const user = requireAuthenticatedUser()
-    const id = generateId()
-    const timestamp = nowIso()
-
-    const storedProject: StoredProject = {
-      id,
-      name: name.trim(),
-      description: description?.trim() || '',
-      ownerId: user.id,
-      createdAt: timestamp,
-      updatedAt: timestamp,
-      projectData: clone(DEFAULT_PROJECT_DATA),
-      members: [
-        {
-          userId: user.id,
-          role: 'owner',
-          joinedAt: timestamp,
-        },
-      ],
-    }
-
-    dbState.projects[id] = storedProject
-    persistState()
+    setAuthToken(payload.token);
+    cacheUser(payload.user);
 
     return {
-      project: projectToProjectData(storedProject),
-    }
+      user: payload.user,
+      session: buildSession(payload.token, payload.user),
+    };
   },
 
-  update: async (projectId: string, projectData: any) => {
-    const user = requireAuthenticatedUser()
-    const project = ensureProject(projectId)
-
-    if (project.ownerId !== user.id) {
-      throw new Error('Only the owner can update this project')
-    }
-
-    project.projectData = clone(projectData)
-    project.updatedAt = nowIso()
-
-    persistState()
-
-    return { success: true }
+  async getMe() {
+    const payload = await apiFetch<{ user: User }>('/api/auth/me');
+    cacheUser(payload.user);
+    return payload;
   },
 
-  delete: async (projectId: string) => {
-    const user = requireAuthenticatedUser()
-    const project = ensureProject(projectId)
-
-    if (project.ownerId !== user.id) {
-      throw new Error('Only the owner can delete this project')
-    }
-
-    delete dbState.projects[projectId]
-    persistState()
-
-    return { success: true }
+  async logout() {
+    clearAuthToken();
+    clearCachedUser();
+    return Promise.resolve();
   },
 
-  share: async (projectId: string, userEmail: string, role: string = 'viewer') => {
-    const owner = requireAuthenticatedUser()
-    const project = ensureProject(projectId)
-
-    if (project.ownerId !== owner.id) {
-      throw new Error('Only the owner can share this project')
+  async getSession() {
+    const token = getAuthToken();
+    const user = getCachedUser();
+    if (!token || !user) {
+      return null;
     }
+    return buildSession(token, user);
+  },
+};
 
-    const targetUser = getUserByEmail(userEmail)
-    if (!targetUser) {
-      throw new Error('User not found')
-    }
-
-    if (targetUser.id === owner.id) {
-      return { success: true }
-    }
-
-    const existing = project.members.find(member => member.userId === targetUser.id)
-    const joinedAt = nowIso()
-
-    if (existing) {
-      existing.role = role
-      existing.joinedAt = existing.joinedAt || joinedAt
-    } else {
-      project.members.push({
-        userId: targetUser.id,
-        role,
-        joinedAt,
-      })
-    }
-
-    project.updatedAt = nowIso()
-    persistState()
-
-    return { success: true }
+const projectsAPIImpl = {
+  async getAll(): Promise<{ projects: ProjectData[]; invitations: ProjectInvitation[] }> {
+    const payload = await apiFetch<{ projects: ProjectData[]; invitations?: ProjectInvitation[] }>(
+      '/api/projects'
+    );
+    return {
+      projects: payload.projects ?? [],
+      invitations: payload.invitations ?? [],
+    };
   },
 
-  getMembers: async (projectId: string) => {
-    const project = ensureProject(projectId)
-    ensureOwnerMember(project)
+  async getById(projectId: string): Promise<{ project: ProjectData }> {
+    return apiFetch<{ project: ProjectData }>(`/api/projects/${projectId}`);
+  },
 
-    const members = project.members.map(member => {
-      const user = getUserById(member.userId)
-      return {
-        id: member.userId,
-        username: user?.username || '',
-        displayName: user?.displayName || user?.username || user?.email || '',
-        role: member.role,
-        joinedAt: member.joinedAt,
+  async create(name: string, description?: string) {
+    return apiFetch<{ project: ProjectData; message: string }>('/api/projects', {
+      method: 'POST',
+      body: { name, description },
+    });
+  },
+
+  async update(projectId: string, projectData: any, metadata?: { name?: string; description?: string }) {
+    return apiFetch<{ message: string }>(`/api/projects/${projectId}`, {
+      method: 'PUT',
+      body: {
+        projectData,
+        name: metadata?.name,
+        description: metadata?.description,
+      },
+    });
+  },
+
+  async delete(projectId: string) {
+    return apiFetch<{ message: string }>(`/api/projects/${projectId}`, {
+      method: 'DELETE',
+    });
+  },
+
+  async share(projectId: string, userEmail: string, role: string = 'viewer') {
+    return apiFetch<{ message: string; member?: ProjectMember; invitation?: ProjectInvitation }>(
+      `/api/projects/${projectId}/share`,
+      {
+        method: 'POST',
+        body: { userEmail, role },
       }
-    })
-
-    return { members }
+    );
   },
 
-  removeMember: async (projectId: string, memberId: string) => {
-    const owner = requireAuthenticatedUser()
-    const project = ensureProject(projectId)
-
-    if (project.ownerId !== owner.id) {
-      throw new Error('Only the owner can modify members')
-    }
-
-    if (memberId === owner.id) {
-      throw new Error('The owner cannot be removed from the project')
-    }
-
-    project.members = project.members.filter(member => member.userId !== memberId)
-    project.updatedAt = nowIso()
-    persistState()
-
-    return { success: true }
+  async getMembers(projectId: string) {
+    return apiFetch<{ owner: ProjectMember | null; members: ProjectMember[] }>(
+      `/api/projects/${projectId}/members`
+    );
   },
-}
+
+  async updateMember(projectId: string, memberId: string, updates: Partial<Pick<ProjectMember, 'role' | 'status'>>) {
+    return apiFetch<{ message: string }>(`/api/projects/${projectId}/members/${memberId}`, {
+      method: 'PATCH',
+      body: updates,
+    });
+  },
+
+  async removeMember(projectId: string, memberId: string) {
+    return apiFetch<{ message: string }>(`/api/projects/${projectId}/members/${memberId}`, {
+      method: 'DELETE',
+    });
+  },
+
+  async listInvitations() {
+    return apiFetch<{ invitations: ProjectInvitation[] }>('/api/projects/invitations');
+  },
+
+  async respondToInvitation(token: string, action: 'accept' | 'decline') {
+    return apiFetch<{ message: string }>(`/api/projects/invitations/${token}/${action}`, {
+      method: 'POST',
+    });
+  },
+
+  async getActivity(projectId: string) {
+    return apiFetch<{ activity: ProjectActivityItem[] }>(`/api/projects/${projectId}/activity`);
+  },
+
+  async getComments(projectId: string) {
+    return apiFetch<{ comments: ProjectComment[] }>(`/api/projects/${projectId}/comments`);
+  },
+
+  async addComment(projectId: string, input: { body: string; nodeId?: string; type?: string }) {
+    return apiFetch<{ message: string; comment: ProjectComment }>(`/api/projects/${projectId}/comments`, {
+      method: 'POST',
+      body: input,
+    });
+  },
+
+  async updateComment(projectId: string, commentId: string, body: string) {
+    return apiFetch<{ message: string }>(`/api/projects/${projectId}/comments/${commentId}`, {
+      method: 'PUT',
+      body: { body },
+    });
+  },
+
+  async deleteComment(projectId: string, commentId: string) {
+    return apiFetch<{ message: string }>(`/api/projects/${projectId}/comments/${commentId}`, {
+      method: 'DELETE',
+    });
+  },
+};
+
+// Use Supabase API instead of Express backend
+export { authAPI, projectsAPI } from './supabaseApi';
+export const apiBaseUrl = process.env.REACT_APP_SUPABASE_URL || '';

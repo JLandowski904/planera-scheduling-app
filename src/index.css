@@ -25,4 +25,55 @@ html, body, #root {
   overflow: hidden;
 }
 
+@page {
+  margin: 0.5in;
+}
+
+@media print {
+  html, body, #root {
+    height: auto;
+    overflow: visible;
+  }
+
+  body {
+    background: #ffffff;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .no-print {
+    display: none !important;
+  }
+
+  .print-surface {
+    overflow: visible !important;
+  }
+
+  .print-area {
+    padding: 0.5in;
+    background: #ffffff;
+  }
+
+  body[data-print-view="whiteboard"] .whiteboard-canvas {
+    background: #ffffff !important;
+    box-shadow: none !important;
+  }
+
+  body[data-print-view="timeline"] .timeline-view,
+  body[data-print-view="calendar"] .calendar-view,
+  body[data-print-view="table"] .table-view {
+    background: #ffffff !important;
+  }
+
+  .print-area--whiteboard .whiteboard-canvas {
+    overflow: visible !important;
+  }
+
+  .print-area--timeline .timeline-view,
+  .print-area--calendar .calendar-view,
+  .print-area--table .table-view {
+    box-shadow: none !important;
+  }
+}
+
 

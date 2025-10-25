@@ -226,9 +226,9 @@ const TableView: React.FC<TableViewProps> = ({
   };
 
   return (
-    <div className="h-full flex flex-col bg-slate-50">
+    <div className="table-view h-full flex flex-col bg-slate-50">
       {/* Table header with filters */}
-      <div className="border-b border-slate-200 p-6 bg-white">
+      <div className="border-b border-slate-200 p-6 bg-white no-print">
         <div className="flex items-center gap-4 mb-4">
           {/* Search */}
           <div className="relative flex-1 max-w-md">
@@ -395,6 +395,8 @@ const TableView: React.FC<TableViewProps> = ({
                 key={node.id}
                 className={`timeline-row cursor-pointer ${
                   selectedNodes.includes(node.id) ? 'bg-blue-50' : ''
+                } ${
+                  node.data.status === 'done' ? 'opacity-60 bg-gray-50' : ''
                 }`}
                 onClick={() => onNodeSelect(node.id)}
               >

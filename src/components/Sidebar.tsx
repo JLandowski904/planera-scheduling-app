@@ -348,6 +348,8 @@ const Sidebar: React.FC<SidebarProps> = ({
               selectedNodes.includes(node.id)
                 ? 'bg-blue-50 border-blue-300 text-blue-900'
                 : 'bg-white border-gray-200 hover:bg-gray-50'
+            } ${
+              node.data.status === 'done' ? 'opacity-60 bg-gray-50' : ''
             }`}
           >
             <div className="flex items-center justify-between">

@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useNavigate } from '../lib/simpleRouter';
-import { ArrowLeft, Share2 } from 'lucide-react';
+import { ArrowLeft, Share2, Printer, Users } from 'lucide-react';
 import Canvas from '../components/Canvas';
 import TimelineView from '../components/TimelineView';
 import TableView from '../components/TableView';
@@ -8,7 +8,8 @@ import CalendarView from '../components/CalendarView';
 import AppLayout from '../components/Layout/AppLayout';
 import NodeDialog from '../components/NodeDialog';
 import PhaseDialog from '../components/PhaseDialog';
-import { projectsAPI, ProjectData } from '../services/api';
+import { projectsAPI, ProjectData, ProjectAccess } from '../services/api';
+import ProjectCollaborationPanel from '../components/ProjectCollaborationPanel';
 import { Project, ViewType, Node, NodeType, Phase, Edge, DependencyType } from '../types';
 import { createDefaultProject } from '../utils/projectUtils';
 import { DEFAULT_PHASE_COLOR, getNodesBoundingBox, getNodesInPhase, removeNodeIdsFromPhases } from '../utils/phaseUtils';
@@ -151,6 +152,9 @@ const ProjectView: React.FC = () => {
   const [selectedNodes, setSelectedNodes] = useState<string[]>([]);
   const [selectedEdges, setSelectedEdges] = useState<string[]>([]);
   const [selectedPhases, setSelectedPhases] = useState<string[]>([]);
+  const [projectAccess, setProjectAccess] = useState<ProjectAccess | null>(null);
+  const [collaborationOpen, setCollaborationOpen] = useState(false);
+  const [collaborationInitialTab, setCollaborationInitialTab] = useState<'activity' | 'comments' | 'members'>('activity');
   const [nodeDialogState, setNodeDialogState] = useState<{
     isOpen: boolean;
     mode: 'create' | 'edit';
@@ -185,6 +189,20 @@ const ProjectView: React.FC = () => {
     phase: null,
   });
 
+  const currentUser = useMemo(() => {
+    try {
+      return JSON.parse(localStorage.getItem('user') || 'null');
+    } catch (err) {
+      console.warn('Failed to parse current user from storage', err);
+      return null;
+    }
+  }, []);
+  const currentUserId = currentUser?.id ?? null;
+  const collaborationRole = useMemo(() => {
+    const role = projectAccess?.role;
+    return role === 'owner' || role === 'editor' || role === 'viewer' ? role : 'viewer';
+  }, [projectAccess]);
+
   useEffect(() => {
     loadProject();
   }, [projectId]);
@@ -195,6 +213,7 @@ const ProjectView: React.FC = () => {
       const response = await projectsAPI.getById(projectId!);
       const normalizedProject = normalizeProjectResponse(response.project);
       setProject(applyEdgeConflictState(normalizedProject));
+      setProjectAccess(response.project.access ?? null);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load project');
       console.error('Load project error:', err);
@@ -440,6 +459,35 @@ const ProjectView: React.FC = () => {
     }
   }, [project, handleProjectChange]);
 
+  const handlePrint = useCallback(() => {
+    if (!project) {
+      return;
+    }
+
+    const view = project.viewSettings.currentView;
+    const body = document.body;
+    const previousValue = body.getAttribute('data-print-view') ?? null;
+    let cleanedUp = false;
+
+    const cleanup = () => {
+      if (cleanedUp) {
+        return;
+      }
+      cleanedUp = true;
+      if (previousValue) {
+        body.setAttribute('data-print-view', previousValue);
+      } else {
+        body.removeAttribute('data-print-view');
+      }
+      window.removeEventListener('afterprint', cleanup);
+    };
+
+    body.setAttribute('data-print-view', view);
+    window.addEventListener('afterprint', cleanup);
+    window.print();
+    cleanup();
+  }, [project]);
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-screen bg-gray-50">
@@ -479,7 +527,7 @@ const ProjectView: React.FC = () => {
           <div className="flex items-center gap-4">
             <button
               onClick={() => navigate('/projects')}
-              className="p-2 hover:bg-gray-100 rounded-lg transition"
+              className="p-2 hover:bg-gray-100 rounded-lg transition no-print"
               title="Back to Projects"
             >
               <ArrowLeft className="w-5 h-5 text-gray-600" />
@@ -491,119 +539,164 @@ const ProjectView: React.FC = () => {
               )}
             </div>
           </div>
-          <button 
-            className="flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition font-medium"
-            title="Share this project with others"
-          >
-            <Share2 className="w-4 h-4" />
-            Share
-          </button>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => {
+                setCollaborationInitialTab('activity');
+                setCollaborationOpen(true);
+              }}
+              className="flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition font-medium no-print"
+              title="Open collaboration tools"
+            >
+              <Users className="w-4 h-4" />
+              Collaborate
+            </button>
+            <button 
+              onClick={() => {
+                setCollaborationInitialTab('members');
+                setCollaborationOpen(true);
+              }}
+              className="flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition font-medium no-print"
+              title="Share this project with others"
+            >
+              <Share2 className="w-4 h-4" />
+              Share
+            </button>
+            <button
+              onClick={handlePrint}
+              className="flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition font-medium no-print"
+              title="Print the current view"
+            >
+              <Printer className="w-4 h-4" />
+              Print
+            </button>
+          </div>
         </div>
 
         {/* Main Content */}
-        <div className="flex-1 overflow-hidden">
+        <div className="flex-1 overflow-hidden print-surface">
           {project.viewSettings.currentView === 'whiteboard' && (
-            <Canvas
-              project={project}
-              onProjectChange={handleProjectChange}
-              selectedNodes={selectedNodes}
-              selectedEdges={selectedEdges}
-              selectedPhases={selectedPhases}
-              onNodeSelect={(nodeId, multiSelect) => {
-                if (multiSelect) {
-                  setSelectedNodes(prev => 
-                    prev.includes(nodeId) 
-                      ? prev.filter(id => id !== nodeId)
-                      : [...prev, nodeId]
-                  );
-                } else {
+            <div className="h-full flex flex-col print-area print-area--whiteboard">
+              <Canvas
+                project={project}
+                onProjectChange={handleProjectChange}
+                selectedNodes={selectedNodes}
+                selectedEdges={selectedEdges}
+                selectedPhases={selectedPhases}
+                onNodeSelect={(nodeId, multiSelect) => {
+                  if (multiSelect) {
+                    setSelectedNodes(prev => 
+                      prev.includes(nodeId) 
+                        ? prev.filter(id => id !== nodeId)
+                        : [...prev, nodeId]
+                    );
+                  } else {
+                    setSelectedNodes([nodeId]);
+                    setSelectedEdges([]);
+                    setSelectedPhases([]);
+                  }
+                }}
+                onEdgeSelect={(edgeId, multiSelect) => {
+                  if (multiSelect) {
+                    setSelectedEdges(prev => 
+                      prev.includes(edgeId) 
+                        ? prev.filter(id => id !== edgeId)
+                        : [...prev, edgeId]
+                    );
+                  } else {
+                    setSelectedEdges([edgeId]);
+                    setSelectedNodes([]);
+                    setSelectedPhases([]);
+                  }
+                }}
+                onPhaseSelect={(phaseId, multiSelect) => {
+                  if (multiSelect) {
+                    setSelectedPhases(prev =>
+                      prev.includes(phaseId)
+                        ? prev.filter(id => id !== phaseId)
+                        : [...prev, phaseId]
+                    );
+                  } else {
+                    setSelectedPhases([phaseId]);
+                    setSelectedNodes([]);
+                    setSelectedEdges([]);
+                  }
+                }}
+                onCanvasClick={() => {
+                  setSelectedNodes([]);
+                  setSelectedEdges([]);
+                  setSelectedPhases([]);
+                }}
+                onContextMenu={() => {}}
+                linkMode={false}
+                linkSource={null}
+                onLinkSourceChange={() => {}}
+                onEdgeDelete={handleDeleteEdge}
+                onNewNode={handleCreateNode}
+                onNewPhase={handleCreatePhase}
+                onUndo={() => {}}
+                onRedo={() => {}}
+                canUndo={false}
+                canRedo={false}
+                onEditNode={handleEditNode}
+                onDeleteNode={handleDeleteNode}
+                onEditPhase={handleEditPhase}
+                onDeletePhase={handleDeletePhase}
+              />
+            </div>
+          )}
+          {project.viewSettings.currentView === 'timeline' && (
+            <div className="h-full flex flex-col print-area print-area--timeline">
+              <TimelineView
+                project={project}
+                onProjectChange={handleProjectChange}
+                selectedNodes={selectedNodes}
+                selectedEdges={selectedEdges}
+                onNodeSelect={(nodeId) => setSelectedNodes([nodeId])}
+                onEdgeSelect={(edgeId) => setSelectedEdges([edgeId])}
+                onCanvasClick={() => {}}
+                onContextMenu={() => {}}
+              />
+            </div>
+          )}
+          {project.viewSettings.currentView === 'table' && (
+            <div className="h-full flex flex-col print-area print-area--table">
+              <TableView
+                project={project}
+                onProjectChange={handleProjectChange}
+                selectedNodes={selectedNodes}
+                onNodeSelect={(nodeId) => setSelectedNodes([nodeId])}
+              />
+            </div>
+          )}
+          {project.viewSettings.currentView === 'calendar' && (
+            <div className="h-full flex flex-col print-area print-area--calendar">
+              <CalendarView
+                project={project}
+                selectedNodes={selectedNodes}
+                onNodeSelect={(nodeId) => {
                   setSelectedNodes([nodeId]);
                   setSelectedEdges([]);
                   setSelectedPhases([]);
-                }
-              }}
-              onEdgeSelect={(edgeId, multiSelect) => {
-                if (multiSelect) {
-                  setSelectedEdges(prev => 
-                    prev.includes(edgeId) 
-                      ? prev.filter(id => id !== edgeId)
-                      : [...prev, edgeId]
-                  );
-                } else {
-                  setSelectedEdges([edgeId]);
-                  setSelectedNodes([]);
-                  setSelectedPhases([]);
-                }
-              }}
-              onPhaseSelect={(phaseId, multiSelect) => {
-                if (multiSelect) {
-                  setSelectedPhases(prev =>
-                    prev.includes(phaseId)
-                      ? prev.filter(id => id !== phaseId)
-                      : [...prev, phaseId]
-                  );
-                } else {
-                  setSelectedPhases([phaseId]);
-                  setSelectedNodes([]);
-                  setSelectedEdges([]);
-                }
-              }}
-              onCanvasClick={() => {
-                setSelectedNodes([]);
-                setSelectedEdges([]);
-                setSelectedPhases([]);
-              }}
-              onContextMenu={() => {}}
-              linkMode={false}
-              linkSource={null}
-              onLinkSourceChange={() => {}}
-              onEdgeDelete={handleDeleteEdge}
-              onNewNode={handleCreateNode}
-              onNewPhase={handleCreatePhase}
-              onUndo={() => {}}
-              onRedo={() => {}}
-              canUndo={false}
-              canRedo={false}
-              onEditNode={handleEditNode}
-              onDeleteNode={handleDeleteNode}
-              onEditPhase={handleEditPhase}
-              onDeletePhase={handleDeletePhase}
-            />
-          )}
-          {project.viewSettings.currentView === 'timeline' && (
-            <TimelineView
-              project={project}
-              onProjectChange={handleProjectChange}
-              selectedNodes={selectedNodes}
-              selectedEdges={selectedEdges}
-              onNodeSelect={(nodeId) => setSelectedNodes([nodeId])}
-              onEdgeSelect={(edgeId) => setSelectedEdges([edgeId])}
-              onCanvasClick={() => {}}
-              onContextMenu={() => {}}
-            />
-          )}
-          {project.viewSettings.currentView === 'table' && (
-            <TableView
-              project={project}
-              onProjectChange={handleProjectChange}
-              selectedNodes={selectedNodes}
-              onNodeSelect={(nodeId) => setSelectedNodes([nodeId])}
-            />
-          )}
-          {project.viewSettings.currentView === 'calendar' && (
-            <CalendarView
-              project={project}
-              selectedNodes={selectedNodes}
-              onNodeSelect={(nodeId) => {
-                setSelectedNodes([nodeId]);
-                setSelectedEdges([]);
-                setSelectedPhases([]);
-              }}
-            />
+                }}
+              />
+            </div>
           )}
         </div>
       </div>
     </AppLayout>
+
+    {project && (
+      <ProjectCollaborationPanel
+        projectId={project.id}
+        projectName={project.name}
+        isOpen={collaborationOpen}
+        onClose={() => setCollaborationOpen(false)}
+        currentRole={collaborationRole}
+        currentUserId={currentUserId}
+        initialTab={collaborationInitialTab}
+      />
+    )}
 
       {showNodeDialog && project && (
         <NodeDialog
@@ -817,6 +910,8 @@ const ProjectView: React.FC = () => {
 };
 
 export default ProjectView;
+
+
 
 
 

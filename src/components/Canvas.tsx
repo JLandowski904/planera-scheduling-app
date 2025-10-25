@@ -596,7 +596,7 @@ const Canvas: React.FC<CanvasProps> = ({
   return (
       <div
         ref={canvasRef}
-        className="w-full h-full relative overflow-hidden bg-slate-50"
+        className="w-full h-full relative overflow-hidden bg-slate-50 whiteboard-canvas"
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
@@ -734,7 +734,7 @@ const Canvas: React.FC<CanvasProps> = ({
 
       {/* Link mode indicator */}
       {linkMode && (
-        <div className="absolute top-4 left-1/2 transform -translate-x-1/2 bg-blue-500 text-white px-3 py-1 rounded text-sm shadow-lg">
+        <div className="absolute top-4 left-1/2 transform -translate-x-1/2 bg-blue-500 text-white px-3 py-1 rounded text-sm shadow-lg no-print">
           Link Mode {linkSource ? `- Click target node` : '- Click source node'}
         </div>
       )}
@@ -768,7 +768,7 @@ const CanvasWithToolbar: React.FC<CanvasProps> = (props) => {
   }, [project, onProjectChange]);
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full print-whiteboard-area">
       <CanvasToolbar
         onNewNode={onNewNode}
         onNewPhase={onNewPhase}

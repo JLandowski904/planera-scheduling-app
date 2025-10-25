@@ -36,7 +36,7 @@ const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
   canRedo,
 }) => {
   return (
-    <div className="bg-white border-b border-slate-200 px-6 py-3 flex items-center justify-between">
+    <div className="bg-white border-b border-slate-200 px-6 py-3 flex items-center justify-between no-print">
       <div className="flex items-center gap-2">
         <button
           onClick={() => onNewNode('task')}

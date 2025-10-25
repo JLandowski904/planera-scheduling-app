@@ -117,7 +117,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({ project, selectedNodes, onN
   }, [project.nodes]);
 
   return (
-    <div className="h-full flex flex-col bg-slate-50">
+    <div className="calendar-view h-full flex flex-col bg-slate-50">
       <div className="bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between">
         <div>
           <h2 className="text-lg font-semibold text-slate-900 flex items-center gap-2">
@@ -128,7 +128,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({ project, selectedNodes, onN
             Tasks, milestones, and deliverables with dates appear on this calendar.
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 no-print">
           <button
             className="px-3 py-2 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-100 transition"
             onClick={() => setCurrentMonth(addMonths(currentMonth, -1))}

@@ -4,6 +4,7 @@ import Login from './pages/Login';
 import Projects from './pages/Projects';
 import ProjectView from './pages/ProjectView';
 import { authAPI } from './services/api';
+import { supabase } from './services/supabase';
 import './App.css';
 
 const getHasToken = () => {
@@ -18,26 +19,18 @@ const App: React.FC = () => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const token = getHasToken();
-
-    if (!token) {
-      setIsAuthenticated(false);
-      setLoading(false);
-      return;
-    }
-
     let isMounted = true;
 
     const validate = async () => {
       try {
-        await authAPI.getMe();
+        const { data: { session } } = await supabase.auth.getSession();
         if (isMounted) {
-          setIsAuthenticated(true);
+          setIsAuthenticated(!!session);
         }
       } catch (error) {
-        console.warn('auth check failed; falling back to local session', error);
+        console.warn('auth check failed', error);
         if (isMounted) {
-          setIsAuthenticated(true);
+          setIsAuthenticated(false);
         }
       } finally {
         if (isMounted) {
@@ -48,8 +41,17 @@ const App: React.FC = () => {
 
     validate();
 
+    // Listen for auth changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (isMounted) {
+        setIsAuthenticated(!!session);
+        setLoading(false);
+      }
+    });
+
     return () => {
       isMounted = false;
+      subscription.unsubscribe();
     };
   }, []);
 

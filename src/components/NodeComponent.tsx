@@ -234,8 +234,9 @@ const NodeComponent: React.FC<NodeComponentProps> = ({
       person: 'node-person',
     };
     const selectedClass = isSelected ? 'node-selected' : '';
+    const completedClass = data.status === 'done' ? 'node-completed' : '';
     
-    return `${baseClasses} ${typeClasses[type]} ${selectedClass}`;
+    return `${baseClasses} ${typeClasses[type]} ${selectedClass} ${completedClass}`;
   };
 
   const formatDate = (date: Date) => {

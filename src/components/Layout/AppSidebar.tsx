@@ -38,7 +38,7 @@ const navigationItems: NavItem[] = [
 
 const AppSidebar: React.FC<AppSidebarProps> = ({ currentView, onViewChange }) => {
   return (
-    <div className="w-64 bg-white border-r border-slate-200 flex flex-col">
+    <div className="app-sidebar w-64 bg-white border-r border-slate-200 flex flex-col no-print">
       {/* Brand Header */}
       <div className="border-b border-slate-200 p-6">
         <div className="flex items-center gap-3">
