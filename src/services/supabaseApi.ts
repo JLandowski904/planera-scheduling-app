@@ -133,8 +133,18 @@ export const authAPI = {
       user: {
         id: user.id,
         email: user.email || '',
-        username: profile?.username || '',
-        displayName: profile?.display_name || '',
+        username:
+          profile?.username ||
+          (user.user_metadata && (user.user_metadata as any).username) ||
+          user.email ||
+          '',
+        displayName:
+          profile?.display_name ||
+          (user.user_metadata && (user.user_metadata as any).display_name) ||
+          profile?.username ||
+          (user.user_metadata && (user.user_metadata as any).username) ||
+          user.email ||
+          '',
       },
     };
   },
