@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useNavigate } from '../lib/simpleRouter';
-import { ArrowLeft, Share2, Printer, Users, Copy, Trash2 } from 'lucide-react';
+import { ArrowLeft, Share2, Printer, Users } from 'lucide-react';
 import Canvas from '../components/Canvas';
 import TimelineView from '../components/TimelineView';
 import TableView from '../components/TableView';
@@ -204,29 +204,7 @@ const ProjectView: React.FC = () => {
     return role === 'owner' || role === 'editor' || role === 'viewer' ? role : 'viewer';
   }, [projectAccess]);
 
-  const handleDeleteProject = useCallback(async () => {
-    if (!projectId) return;
-    if (!window.confirm('Delete this project? This action cannot be undone.')) return;
-    try {
-      await projectsAPI.delete(projectId);
-      navigate('/projects');
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to delete project');
-    }
-  }, [projectId, navigate]);
-
-  const handleDuplicateProject = useCallback(async () => {
-    if (!project) return;
-    try {
-      const newName = `${project.name} (Copy)`;
-      const { project: created } = await projectsAPI.create(newName, project.description || undefined);
-      // Save current project state into the new project
-      await projectsAPI.update(created.id, project, { name: newName, description: project.description });
-      navigate(`/project/${created.id}`);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to duplicate project');
-    }
-  }, [project, navigate]);
+  // Duplicate/Delete actions moved to Projects page
 
   const loadProject = useCallback(async () => {
     try {
@@ -585,24 +563,7 @@ const ProjectView: React.FC = () => {
             </div>
           </div>
           <div className="flex items-center gap-3">
-            <button
-              onClick={handleDuplicateProject}
-              className="flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition font-medium no-print"
-              title="Create a duplicate of this project"
-            >
-              <Copy className="w-4 h-4" />
-              Duplicate
-            </button>
-            {collaborationRole === 'owner' && (
-              <button
-                onClick={handleDeleteProject}
-                className="flex items-center gap-2 px-4 py-2 border border-red-300 text-red-700 rounded-lg hover:bg-red-50 transition font-medium no-print"
-                title="Delete this project"
-              >
-                <Trash2 className="w-4 h-4" />
-                Delete
-              </button>
-            )}
+            {/* Duplicate/Delete moved to Projects page */}
             <button
               onClick={() => {
                 setCollaborationInitialTab('activity');

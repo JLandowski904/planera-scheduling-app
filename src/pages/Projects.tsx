@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from '../lib/simpleRouter';
-import { Plus, Trash2, LogOut, Users, Clock, MailPlus, Check, XCircle, Loader2 } from 'lucide-react';
+import { Plus, Trash2, LogOut, Users, Clock, MailPlus, Check, XCircle, Loader2, Copy } from 'lucide-react';
 import { authAPI, projectsAPI, ProjectData, ProjectInvitation } from '../services/api';
 
 const Projects: React.FC = () => {
@@ -20,7 +20,7 @@ const Projects: React.FC = () => {
   const [invitations, setInvitations] = useState<ProjectInvitation[]>([]);
   const [invitationActionId, setInvitationActionId] = useState<string | null>(null);
 
-  const user = JSON.parse(localStorage.getItem('user') || '{}');
+  const [currentUserName, setCurrentUserName] = useState<string>('');
 
   const loadProjects = useCallback(async () => {
     try {
@@ -49,12 +49,16 @@ const Projects: React.FC = () => {
   }, [navigate]);
 
   useEffect(() => {
-    // Debug authentication status
-    const token = localStorage.getItem('authToken');
-    const user = JSON.parse(localStorage.getItem('user') || '{}');
-    console.log('Auth debug:', { hasToken: !!token, user: user.displayName || user.username });
-
-    loadProjects();
+    const init = async () => {
+      try {
+        const me = await authAPI.getMe();
+        const name = me?.user?.displayName || me?.user?.username || me?.user?.email || '';
+        setCurrentUserName(name);
+      } catch {}
+      await authAPI.getSession();
+      loadProjects();
+    };
+    init();
   }, [loadProjects]);
 
   const handleCreateProject = async (e: React.FormEvent) => {
@@ -106,6 +110,19 @@ const Projects: React.FC = () => {
       await loadProjects();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to delete project');
+    }
+  };
+
+  const handleDuplicateProject = async (project: ProjectData) => {
+    try {
+      const newName = `${project.name} (Copy)`;
+      const { project: created } = await projectsAPI.create(newName, project.description || undefined);
+      if (project.projectData) {
+        await projectsAPI.update(created.id, project.projectData, { name: newName, description: project.description });
+      }
+      await loadProjects();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to duplicate project');
     }
   };
 
@@ -166,7 +183,7 @@ const Projects: React.FC = () => {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center">
           <div>
             <h1 className="text-3xl font-bold text-gray-900">Your Projects</h1>
-            <p className="text-sm text-gray-600 mt-1">Welcome, {user.displayName || user.username}</p>
+            <p className="text-sm text-gray-600 mt-1">Welcome{currentUserName ? `, ${currentUserName}` : ''}</p>
           </div>
           <button
             onClick={handleLogout}
@@ -387,7 +404,7 @@ const Projects: React.FC = () => {
                   >
                     Open
                   </button>
-                  {project.ownerId === user.id && (
+                  {project.access && project.access.role === 'owner' && (
                     <>
                       <button
                         onClick={() => {
@@ -412,6 +429,13 @@ const Projects: React.FC = () => {
                       </button>
                     </>
                   )}
+                  <button
+                    onClick={() => handleDuplicateProject(project)}
+                    className="px-3 py-2 border border-gray-300 rounded hover:bg-gray-50 transition text-sm"
+                    title="Duplicate project"
+                  >
+                    <Copy className="w-4 h-4" />
+                  </button>
                 </div>
               </div>
             ))}
@@ -488,9 +512,6 @@ const Projects: React.FC = () => {
 };
 
 export default Projects;
-
-
-
 
 
 
