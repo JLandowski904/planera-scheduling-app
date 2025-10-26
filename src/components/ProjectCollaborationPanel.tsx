@@ -1,4 +1,4 @@
-﻿import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import clsx from 'clsx';
 import { io, Socket } from 'socket.io-client';
 import {
@@ -126,232 +126,189 @@ const ProjectCollaborationPanel: React.FC<ProjectCollaborationPanelProps> = ({
   useEffect(() => {
     if (!isOpen || !socketBaseUrl) {
       if (socketRef.current) {
-        socketRef.current.emit('leaveProject', { projectId });
         socketRef.current.disconnect();
         socketRef.current = null;
       }
       return;
     }
 
+    // Establish socket connection
     const socket = io(socketBaseUrl, {
-      transports: ['websocket'],
+      transports: ['websocket', 'polling'],
     });
+    socketRef.current = socket;
 
+    // Subscribe to project room
     socket.emit('joinProject', { projectId });
 
-    const refreshActivity = () => loadActivity();
-    const refreshComments = () => loadComments();
-    const refreshMembers = () => loadMembers();
+    socket.on('project:activity', (item: ProjectActivityItem) => {
+      setActivity(prev => [item, ...prev].slice(0, 100));
+    });
 
-    socket.on('activity:created', refreshActivity);
-    socket.on('comments:created', refreshComments);
-    socket.on('comments:updated', refreshComments);
-    socket.on('comments:deleted', refreshComments);
-    socket.on('project:memberUpdated', refreshMembers);
-    socket.on('project:memberRemoved', refreshMembers);
+    socket.on('project:comment', (comment: ProjectComment) => {
+      setComments(prev => [comment, ...prev]);
+    });
 
-    socketRef.current = socket;
+    socket.on('project:member:updated', () => {
+      loadMembers();
+    });
 
     return () => {
       socket.emit('leaveProject', { projectId });
-      socket.off('activity:created', refreshActivity);
-      socket.off('comments:created', refreshComments);
-      socket.off('comments:updated', refreshComments);
-      socket.off('comments:deleted', refreshComments);
-      socket.off('project:memberUpdated', refreshMembers);
-      socket.off('project:memberRemoved', refreshMembers);
       socket.disconnect();
       socketRef.current = null;
     };
-  }, [isOpen, projectId, loadActivity, loadComments, loadMembers]);
+  }, [isOpen, projectId, loadMembers]);
 
-  useEffect(() => {
-    if (isOpen) {
-      setActiveTab(initialTab ?? 'activity');
-    }
-  }, [isOpen, initialTab]);
-
-  if (!isOpen) {
-    return null;
-  }
-
-  const handleAddComment = async (event: React.FormEvent) => {
-    event.preventDefault();
-    if (!commentDraft.trim()) {
-      return;
-    }
+  const handleCommentSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!commentDraft.trim()) return;
 
     try {
       setSubmittingComment(true);
-      await projectsAPI.addComment(projectId, { body: commentDraft.trim() });
+      const { comment } = await projectsAPI.addComment(projectId, { body: commentDraft.trim() });
+      setComments(prev => [comment, ...prev]);
       setCommentDraft('');
-      await loadComments();
     } catch (err) {
-      setCommentsState({ loading: false, error: handleError(err) });
+      // eslint-disable-next-line no-alert
+      alert(errorMessage(err));
     } finally {
       setSubmittingComment(false);
     }
   };
 
-  const handleDeleteComment = async (comment: ProjectComment) => {
-    if (!isOwner && comment.authorId !== currentUserId) {
-      return;
-    }
+  const handleShareSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!shareEmail.trim()) return;
 
     try {
-      await projectsAPI.deleteComment(projectId, comment.id);
-      await loadComments();
-    } catch (err) {
-      setCommentsState({ loading: false, error: handleError(err) });
-    }
-  };
-
-  const handleShareSubmit = async (event: React.FormEvent) => {
-    event.preventDefault();
-    if (!shareEmail.trim()) {
-      return;
-    }
-
-    setShareLoading(true);
-    setShareMessage('');
-    try {
-      const response = await projectsAPI.share(projectId, shareEmail.trim(), shareRole);
-      if (response.member) {
-        await loadMembers();
-        setShareMessage(`Shared with ${response.member.displayName || response.member.email}`);
-      } else if (response.invitation) {
-        setShareMessage(`Invitation sent to ${response.invitation.email}`);
+      setShareLoading(true);
+      setShareMessage('');
+      const res = await projectsAPI.share(projectId, shareEmail.trim(), shareRole);
+      if (res.member) {
+        setShareMessage(`Shared with ${res.member.displayName || res.member.username}`);
+      } else if (res.invitation) {
+        setShareMessage(`Invitation sent to ${res.invitation.email}`);
       } else {
-        setShareMessage(response.message || 'Share updated');
+        setShareMessage('Share updated');
       }
       setShareEmail('');
+      await loadMembers();
     } catch (err) {
-      setShareMessage(handleError(err));
+      setShareMessage(errorMessage(err));
     } finally {
       setShareLoading(false);
     }
   };
 
+  const errorMessage = (err: unknown) => (err instanceof Error ? err.message : 'Something went wrong');
+
   const handleRemoveMember = async (memberId: string) => {
-    if (!isOwner) return;
+    if (!window.confirm('Remove this member from the project?')) return;
     try {
       await projectsAPI.removeMember(projectId, memberId);
       await loadMembers();
     } catch (err) {
-      setMembersState({ loading: false, error: handleError(err) });
+      // eslint-disable-next-line no-alert
+      alert(errorMessage(err));
     }
   };
 
-  const renderActivity = () => {
-    if (activityState.loading) {
-      return (
-        <div className='flex items-center justify-center h-full text-gray-500'>
-          <Loader2 className='w-5 h-5 animate-spin mr-2' />
-          Loading activity
-        </div>
-      );
-    }
+  if (!isOpen) {
+    return null;
+  }
 
-    if (activityState.error) {
-      return (
-        <div className='p-4 text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg'>
+  const renderActivity = () => (
+    <div className='p-4 space-y-3'>
+      {activityState.loading ? (
+        <div className='text-sm text-gray-500'>Loading activity...</div>
+      ) : activityState.error ? (
+        <div className='text-sm text-red-600 bg-red-50 border border-red-100 rounded-md px-3 py-2'>
           {activityState.error}
         </div>
-      );
-    }
-
-    if (activity.length === 0) {
-      return (
-        <div className='p-6 text-center text-sm text-gray-500'>
-          No recent activity yet. Updates to the project will appear here.
-        </div>
-      );
-    }
-
-    return (
-      <ul className='divide-y divide-gray-200'>
-        {activity.map(item => (
-          <li key={item.id} className='px-4 py-3'>
-            <div className='text-sm text-gray-800 font-medium'>
-              {item.actor.displayName || item.actor.username}
-            </div>
-            <div className='text-sm text-gray-600'>
-              {item.action.replace(/_/g, ' ')}
-            </div>
-            <div className='text-xs text-gray-400 mt-1'>
-              {new Date(item.timestamp).toLocaleString()}
-            </div>
-          </li>
-        ))}
-      </ul>
-    );
-  };
+      ) : activity.length === 0 ? (
+        <div className='text-sm text-gray-500'>No recent activity.</div>
+      ) : (
+        <ul className='space-y-3'>
+          {activity.map(item => (
+            <li key={item.id} className='bg-white border border-gray-200 rounded-lg p-3'>
+              <div className='flex items-center justify-between'>
+                <div className='font-medium text-sm text-gray-800'>
+                  {item.actor.displayName || item.actor.username}
+                </div>
+                <div className='text-xs text-gray-400'>
+                  {new Date(item.timestamp).toLocaleString()}
+                </div>
+              </div>
+              <div className='text-sm text-gray-700 mt-1'>
+                {item.action}
+                {item.entityType && (
+                  <span className='text-gray-500'>
+                    {' '}
+                    on {item.entityType} {item.entityId}
+                  </span>
+                )}
+              </div>
+              {item.details && (
+                <pre className='mt-2 text-xs bg-gray-50 rounded p-2 overflow-auto'>
+                  {JSON.stringify(item.details, null, 2)}
+                </pre>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
 
   const renderComments = () => (
-    <div className='flex flex-col h-full'>
-      <div className='flex-1 overflow-y-auto'>
+    <div className='h-full flex flex-col'>
+      <div className='flex-1 overflow-y-auto p-4 space-y-3'>
         {commentsState.loading ? (
-          <div className='flex items-center justify-center h-full text-gray-500'>
-            <Loader2 className='w-5 h-5 animate-spin mr-2' />
-            Loading comments
-          </div>
+          <div className='text-sm text-gray-500'>Loading comments...</div>
         ) : commentsState.error ? (
-          <div className='m-4 text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg p-3'>
+          <div className='text-sm text-red-600 bg-red-50 border border-red-100 rounded-md px-3 py-2'>
             {commentsState.error}
           </div>
         ) : comments.length === 0 ? (
-          <div className='p-6 text-center text-sm text-gray-500'>
-            No comments yet. Start the conversation below.
-          </div>
+          <div className='text-sm text-gray-500'>No comments yet.</div>
         ) : (
-          <ul className='divide-y divide-gray-200'>
+          <ul className='space-y-3'>
             {comments.map(comment => (
-              <li key={comment.id} className='px-4 py-3'>
-                <div className='flex items-start justify-between gap-3'>
-                  <div>
-                    <div className='text-sm font-medium text-gray-800'>
-                      {comment.author.displayName || comment.author.username}
-                    </div>
-                    <div className='text-xs text-gray-400'>
-                      {new Date(comment.createdAt).toLocaleString()}
-                    </div>
+              <li key={comment.id} className='bg-white border border-gray-200 rounded-lg p-3'>
+                <div className='flex items-center justify-between'>
+                  <div className='font-medium text-sm text-gray-800'>
+                    {comment.author.displayName || comment.author.username}
                   </div>
-                  {(isOwner || comment.authorId === currentUserId) && (
-                    <button
-                      type='button'
-                      onClick={() => handleDeleteComment(comment)}
-                      className='text-gray-400 hover:text-red-500'
-                      title='Delete comment'
-                    >
-                      <Trash2 className='w-4 h-4' />
-                    </button>
-                  )}
+                  <div className='text-xs text-gray-400'>
+                    {new Date(comment.createdAt).toLocaleString()}
+                  </div>
                 </div>
-                <p className='text-sm text-gray-700 mt-2 whitespace-pre-wrap'>
+                <div className='text-sm text-gray-700 mt-1 whitespace-pre-wrap'>
                   {comment.body}
-                </p>
+                </div>
               </li>
             ))}
           </ul>
         )}
       </div>
 
-      <form onSubmit={handleAddComment} className='border-t border-gray-200 p-4 bg-gray-50'>
-        <textarea
-          value={commentDraft}
-          onChange={(event) => setCommentDraft(event.target.value)}
-          placeholder='Add a comment...'
-          className='w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500'
-          rows={3}
-        />
-        <div className='flex justify-end mt-3'>
+      <form onSubmit={handleCommentSubmit} className='border-t border-gray-200 p-3'>
+        <div className='flex items-center gap-2'>
+          <input
+            type='text'
+            value={commentDraft}
+            onChange={(e) => setCommentDraft(e.target.value)}
+            placeholder='Add a comment...'
+            className='flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500'
+          />
           <button
             type='submit'
-            disabled={submittingComment || !commentDraft.trim()}
-            className='inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed'
+            disabled={submittingComment}
+            className='inline-flex items-center gap-2 px-3 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed'
           >
             {submittingComment ? <Loader2 className='w-4 h-4 animate-spin' /> : <Send className='w-4 h-4' />}
-            Post
+            Send
           </button>
         </div>
       </form>
@@ -359,36 +316,29 @@ const ProjectCollaborationPanel: React.FC<ProjectCollaborationPanelProps> = ({
   );
 
   const renderMembers = () => (
-    <div className='flex flex-col h-full'>
-      <div className='p-4 border-b border-gray-200 space-y-3'>
-        <div>
-          <h3 className='text-sm font-semibold text-gray-700'>Project Owners</h3>
-          <div className='mt-2 text-sm text-gray-800'>
-            {owner ? (
-              <div className='flex items-center justify-between'>
-                <div>
-                  <div className='font-medium'>{owner.displayName || owner.username}</div>
-                  <div className='text-xs text-gray-400'>{owner.email}</div>
-                </div>
-                <span className='text-xs uppercase bg-blue-100 text-blue-700 px-2 py-1 rounded'>
-                  Owner
-                </span>
+    <div className='h-full overflow-y-auto'>
+      <div className='p-4'>
+        <div className='font-medium text-gray-700'>Owner</div>
+        <div className='mt-2 bg-white border border-gray-200 rounded-lg p-3'>
+          {owner ? (
+            <div>
+              <div className='font-medium text-sm text-gray-800'>
+                {owner.displayName || owner.username}
               </div>
-            ) : (
-              <div className='text-sm text-gray-500'>No owner information available.</div>
-            )}
-          </div>
+              <div className='text-xs text-gray-400'>{owner.email}</div>
+              <div className='text-xs text-gray-500 mt-1'>Owner</div>
+            </div>
+          ) : (
+            <div className='text-sm text-gray-500'>Loading owner...</div>
+          )}
         </div>
 
-        <div>
-          <h3 className='text-sm font-semibold text-gray-700'>Collaborators</h3>
+        <div className='mt-6'>
+          <div className='font-medium text-gray-700'>Members</div>
           {membersState.loading ? (
-            <div className='flex items-center justify-center py-6 text-gray-500'>
-              <Loader2 className='w-5 h-5 animate-spin mr-2' />
-              Loading members
-            </div>
+            <div className='text-sm text-gray-500 mt-2'>Loading members...</div>
           ) : membersState.error ? (
-            <div className='text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg p-3'>
+            <div className='text-sm text-red-600 bg-red-50 border border-red-100 rounded-md px-3 py-2 mt-2'>
               {membersState.error}
             </div>
           ) : members.length === 0 ? (
@@ -515,5 +465,3 @@ const ProjectCollaborationPanel: React.FC<ProjectCollaborationPanelProps> = ({
 };
 
 export default ProjectCollaborationPanel;
-
-

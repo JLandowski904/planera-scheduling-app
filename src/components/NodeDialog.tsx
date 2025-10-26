@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { format, addDays, differenceInCalendarDays } from 'date-fns';
-import { Project, Node, NodeType, Phase, TaskStatus, Priority, DependencyType } from '../types';
+import { Project, Node, NodeType, TaskStatus, Priority, DependencyType } from '../types';
 
 type DialogMode = 'create' | 'edit';
 
@@ -309,7 +309,6 @@ const NodeDialog: React.FC<NodeDialogProps> = ({
     return `${verb} ${labelMap[nodeType]}`;
   }, [mode, nodeType]);
 
-  const availablePhases = project.phases;
   const dependencyCandidates = useMemo(() => {
     return project.nodes
       .filter(candidate => {

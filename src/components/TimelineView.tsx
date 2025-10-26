@@ -1,5 +1,5 @@
-import React, { useMemo, useCallback, useState } from 'react';
-import { Project, Node, Edge, Position } from '../types';
+import React, { useMemo, useState } from 'react';
+import { Project } from '../types';
 import { format, addDays, differenceInDays, startOfWeek, endOfWeek } from 'date-fns';
 import { Calendar, Clock, CheckCircle, User } from 'lucide-react';
 
@@ -102,30 +102,7 @@ const TimelineView: React.FC<TimelineViewProps> = ({
     }).filter((item): item is NonNullable<typeof item> => item !== null);
   }, [project.nodes, timelineBounds, filterPhase, project.phases]);
 
-  const handleNodeDrag = useCallback((nodeId: string, newStartDate: Date) => {
-    const node = project.nodes.find(n => n.id === nodeId);
-    if (!node || !node.data.startDate || !node.data.dueDate) return;
-
-    const duration = differenceInDays(node.data.dueDate, node.data.startDate);
-    const newEndDate = addDays(newStartDate, duration);
-
-    onProjectChange({
-      ...project,
-      nodes: project.nodes.map(n =>
-        n.id === nodeId
-          ? {
-              ...n,
-              data: {
-                ...n.data,
-                startDate: newStartDate,
-                dueDate: newEndDate,
-              },
-            }
-          : n
-      ),
-      updatedAt: new Date(),
-    });
-  }, [project, onProjectChange]);
+  // Removed unused handleNodeDrag to satisfy lint
 
   const getNodeIcon = (type: string) => {
     switch (type) {

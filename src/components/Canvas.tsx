@@ -1,5 +1,5 @@
 import React, { useRef, useState, useCallback } from 'react';
-import { Project, Node, Edge, Position, NodeType, RectSize } from '../types';
+import { Project, Edge, Position, NodeType, RectSize } from '../types';
 import NodeComponent from './NodeComponent';
 import EdgeComponent from './EdgeComponent';
 import CanvasToolbar from './CanvasToolbar';
@@ -67,7 +67,6 @@ const Canvas: React.FC<CanvasProps> = ({
 }) => {
   const canvasRef = useRef<HTMLDivElement>(null);
   const [isDragging, setIsDragging] = useState(false);
-  const [dragStart, setDragStart] = useState<Position>({ x: 0, y: 0 });
   const [isPanning, setIsPanning] = useState(false);
   const [panStart, setPanStart] = useState<Position>({ x: 0, y: 0 });
   const [marqueeStart, setMarqueeStart] = useState<Position | null>(null);
@@ -75,7 +74,6 @@ const Canvas: React.FC<CanvasProps> = ({
   const [isDraggingLink, setIsDraggingLink] = useState(false);
   const [dragLinkStart, setDragLinkStart] = useState<Position | null>(null);
   const [dragLinkEnd, setDragLinkEnd] = useState<Position | null>(null);
-  const [dragLinkSourceId, setDragLinkSourceId] = useState<string | null>(null);
   const [dragLinkTargetId, setDragLinkTargetId] = useState<string | null>(null);
 
   const { viewSettings } = project;
@@ -185,7 +183,6 @@ const Canvas: React.FC<CanvasProps> = ({
       setIsDraggingLink(false);
       setDragLinkStart(null);
       setDragLinkEnd(null);
-      setDragLinkSourceId(null);
       setDragLinkTargetId(null);
       
       // CRITICAL: Reset the ref
@@ -228,7 +225,6 @@ const Canvas: React.FC<CanvasProps> = ({
     setDragLinkStart({ x: startX, y: startY });
     setDragLinkEnd({ x: startX, y: startY });
     setIsDraggingLink(true);
-    setDragLinkSourceId(nodeId);
     
     // CRITICAL: Set the ref directly here
     isDraggingLinkRef.current = true;
@@ -548,13 +544,7 @@ const Canvas: React.FC<CanvasProps> = ({
   }, [onEdgeSelect]);
 
   // Handle edge delete
-  const handleEdgeDelete = useCallback((edgeId: string) => {
-    onProjectChange({
-      ...project,
-      edges: project.edges.filter(edge => edge.id !== edgeId),
-      updatedAt: new Date(),
-    });
-  }, [project, onProjectChange]);
+  
 
   // Handle canvas context menu
   const handleCanvasContextMenu = useCallback((e: React.MouseEvent) => {

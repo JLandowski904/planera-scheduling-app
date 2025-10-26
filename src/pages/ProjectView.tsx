@@ -204,11 +204,7 @@ const ProjectView: React.FC = () => {
     return role === 'owner' || role === 'editor' || role === 'viewer' ? role : 'viewer';
   }, [projectAccess]);
 
-  useEffect(() => {
-    loadProject();
-  }, [projectId]);
-
-  const loadProject = async () => {
+  const loadProject = useCallback(async () => {
     try {
       setLoading(true);
       const response = await projectsAPI.getById(projectId!);
@@ -221,7 +217,11 @@ const ProjectView: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [projectId]);
+
+  useEffect(() => {
+    loadProject();
+  }, [loadProject]);
 
   const handleProjectChange = useCallback(async (updatedProject: Project) => {
     const projectWithConflicts = applyEdgeConflictState(updatedProject);

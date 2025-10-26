@@ -3,7 +3,6 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from './lib/simpleRo
 import Login from './pages/Login';
 import Projects from './pages/Projects';
 import ProjectView from './pages/ProjectView';
-import { authAPI } from './services/api';
 import { supabase } from './services/supabase';
 import './App.css';
 

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from '../lib/simpleRouter';
 import { Plus, Trash2, LogOut, Users, Clock, MailPlus, Check, XCircle, Loader2 } from 'lucide-react';
 import { authAPI, projectsAPI, ProjectData, ProjectInvitation } from '../services/api';
@@ -22,16 +22,7 @@ const Projects: React.FC = () => {
 
   const user = JSON.parse(localStorage.getItem('user') || '{}');
 
-  useEffect(() => {
-    // Debug authentication status
-    const token = localStorage.getItem('authToken');
-    const user = JSON.parse(localStorage.getItem('user') || '{}');
-    console.log('Auth debug:', { hasToken: !!token, user: user.displayName || user.username });
-    
-    loadProjects();
-  }, []);
-
-  const loadProjects = async () => {
+  const loadProjects = useCallback(async () => {
     try {
       setLoading(true);
       setError(''); // Clear any previous errors
@@ -55,7 +46,16 @@ const Projects: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [navigate]);
+
+  useEffect(() => {
+    // Debug authentication status
+    const token = localStorage.getItem('authToken');
+    const user = JSON.parse(localStorage.getItem('user') || '{}');
+    console.log('Auth debug:', { hasToken: !!token, user: user.displayName || user.username });
+
+    loadProjects();
+  }, [loadProjects]);
 
   const handleCreateProject = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -488,8 +488,6 @@ const Projects: React.FC = () => {
 };
 
 export default Projects;
-
-
 
 
 

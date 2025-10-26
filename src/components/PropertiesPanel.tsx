@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useMemo } from 'react';
 import { Project, Node, Edge, NodeType, TaskStatus, Priority, DependencyType, Phase } from '../types';
 import { format } from 'date-fns';
-import { X, Save, Calendar, User, Tag, FileText, AlertTriangle } from 'lucide-react';
+import { X, Save, FileText, AlertTriangle } from 'lucide-react';
 
 interface PropertiesPanelProps {
   project: Project;

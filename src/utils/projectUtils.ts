@@ -1,4 +1,4 @@
-import { Project, Node, Edge, ViewType, NodeType, TaskStatus, Priority } from '../types';
+import { Project, Node, Edge, ViewType, TaskStatus, Priority } from '../types';
 import { v4 as uuidv4 } from 'uuid';
 
 export const createDefaultProject = (): Project => ({
@@ -337,4 +337,3 @@ export const detectCircularDependencies = (edges: Edge[]): string[][] => {
 
   return cycles;
 };
-
