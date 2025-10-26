@@ -22,6 +22,7 @@ interface CanvasProps {
   linkSource: string | null;
   onLinkSourceChange: (nodeId: string | null) => void;
   onEdgeDelete: (edgeId: string) => void;
+  onEditEdge?: (edgeId: string) => void;
   onNewNode: (type: NodeType) => void;
   onNewPhase: () => void;
   onUndo: () => void;
@@ -52,6 +53,7 @@ const Canvas: React.FC<CanvasProps> = ({
   linkSource,
   onLinkSourceChange,
   onEdgeDelete,
+  onEditEdge,
   onNewNode,
   onNewPhase,
   onUndo,
@@ -660,6 +662,14 @@ const Canvas: React.FC<CanvasProps> = ({
               onClick={(e) => handleEdgeClick(edge.id, e)}
               onDelete={() => onEdgeDelete(edge.id)}
               onContextMenu={(e) => onContextMenu(e, edge.id, 'edge')}
+              onEdit={() => {
+                if (onEditEdge) {
+                  onEditEdge(edge.id);
+                } else {
+                  // Fallback: select edge to surface existing edit UIs elsewhere
+                  onEdgeSelect(edge.id);
+                }
+              }}
             />
           ))}
           

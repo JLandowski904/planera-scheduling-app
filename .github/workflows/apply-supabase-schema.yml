@@ -1,0 +1,33 @@
+name: Apply Supabase Schema (manual)
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Type APPLY to confirm you understand this may DROP and recreate tables.'
+        required: true
+
+jobs:
+  apply:
+    if: ${{ github.event.inputs.confirm == 'APPLY' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install psql client
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client
+
+      - name: Apply schema to Supabase
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          if [ -z "$SUPABASE_DB_URL" ]; then
+            echo "SUPABASE_DB_URL secret is not set." >&2
+            exit 1
+          fi
+          echo "Applying supabase-schema-fixed.sql to Supabase..."
+          psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -f supabase-schema-fixed.sql
+

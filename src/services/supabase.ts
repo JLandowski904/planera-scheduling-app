@@ -87,6 +87,42 @@ export interface Database {
         }
         Relationships: []
       }
+      project_invitations: {
+        Row: {
+          id: string
+          project_id: string
+          email: string
+          role: string
+          status: string
+          token: string
+          invited_at: string
+          accepted_at: string | null
+          inviter_id: string
+        }
+        Insert: {
+          id?: string
+          project_id: string
+          email: string
+          role?: string
+          status?: string
+          token: string
+          invited_at?: string
+          accepted_at?: string | null
+          inviter_id: string
+        }
+        Update: {
+          id?: string
+          project_id?: string
+          email?: string
+          role?: string
+          status?: string
+          token?: string
+          invited_at?: string
+          accepted_at?: string | null
+          inviter_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: Record<string, never>
     Functions: Record<string, never>

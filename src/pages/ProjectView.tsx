@@ -6,6 +6,7 @@ import TimelineView from '../components/TimelineView';
 import TableView from '../components/TableView';
 import CalendarView from '../components/CalendarView';
 import AppLayout from '../components/Layout/AppLayout';
+import PropertiesPanel from '../components/PropertiesPanel';
 import NodeDialog from '../components/NodeDialog';
 import PhaseDialog from '../components/PhaseDialog';
 import { projectsAPI, ProjectData, ProjectAccess } from '../services/api';
@@ -397,6 +398,8 @@ const ProjectView: React.FC = () => {
     setSelectedPhases(prev => prev.filter(phaseId => remainingPhases.some(p => p.id === phaseId)));
   }, [project, handleProjectChange]);
 
+  const [isPropertiesOpen, setIsPropertiesOpen] = useState(false);
+
   const handleDeleteEdge = useCallback((edgeId: string) => {
     if (!project) {
       return;
@@ -410,6 +413,24 @@ const ProjectView: React.FC = () => {
 
     handleProjectChange(updatedProject);
     setSelectedEdges(prev => prev.filter(id => id !== edgeId));
+  }, [project, handleProjectChange]);
+
+  const handleEditEdge = useCallback((edgeId: string) => {
+    // Select the edge and open the properties panel for full editing
+    setSelectedEdges([edgeId]);
+    setSelectedNodes([]);
+    setSelectedPhases([]);
+    setIsPropertiesOpen(true);
+  }, []);
+
+  const handlePhaseUpdate = useCallback((phase: Phase) => {
+    if (!project) return;
+    const updatedProject: Project = {
+      ...project,
+      phases: project.phases.map(p => (p.id === phase.id ? phase : p)),
+      updatedAt: new Date(),
+    };
+    handleProjectChange(updatedProject);
   }, [project, handleProjectChange]);
 
   const handleEditPhase = useCallback((phaseId: string) => {
@@ -574,7 +595,8 @@ const ProjectView: React.FC = () => {
         </div>
 
         {/* Main Content */}
-        <div className="flex-1 min-h-0 overflow-auto print-surface">
+        <div className="flex-1 min-h-0 flex overflow-hidden print-surface">
+          <div className="flex-1 min-h-0 overflow-auto">
           {project.viewSettings.currentView === 'whiteboard' && (
             <div className="h-full min-h-0 flex flex-col print-area print-area--whiteboard">
               <Canvas
@@ -607,6 +629,7 @@ const ProjectView: React.FC = () => {
                     setSelectedEdges([edgeId]);
                     setSelectedNodes([]);
                     setSelectedPhases([]);
+                    setIsPropertiesOpen(true);
                   }
                 }}
                 onPhaseSelect={(phaseId, multiSelect) => {
@@ -632,6 +655,7 @@ const ProjectView: React.FC = () => {
                 linkSource={null}
                 onLinkSourceChange={() => {}}
                 onEdgeDelete={handleDeleteEdge}
+                onEditEdge={handleEditEdge}
                 onNewNode={handleCreateNode}
                 onNewPhase={handleCreatePhase}
                 onUndo={() => {}}
@@ -681,6 +705,18 @@ const ProjectView: React.FC = () => {
                 }}
               />
             </div>
+          )}
+          </div>
+
+          {isPropertiesOpen && (
+            <PropertiesPanel
+              project={project}
+              onProjectChange={handleProjectChange}
+              selectedNodes={selectedNodes}
+              selectedEdges={selectedEdges}
+              onPhaseUpdate={handlePhaseUpdate}
+              onClose={() => setIsPropertiesOpen(false)}
+            />
           )}
         </div>
       </div>
@@ -910,6 +946,7 @@ const ProjectView: React.FC = () => {
 };
 
 export default ProjectView;
+
 
 
 

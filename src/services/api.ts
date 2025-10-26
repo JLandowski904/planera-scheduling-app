@@ -415,4 +415,7 @@ const projectsAPIImpl = {
 
 // Use Supabase API instead of Express backend
 export { authAPI, projectsAPI } from './supabaseApi';
-export const apiBaseUrl = process.env.REACT_APP_SUPABASE_URL || '';
+
+// Optional: socket server base URL for realtime via socket.io (not Supabase)
+// Leave empty in Vercel/Supabase-only deployments to disable socket.io.
+export const socketBaseUrl = process.env.REACT_APP_SOCKET_URL || '';

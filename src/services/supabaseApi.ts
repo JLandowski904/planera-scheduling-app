@@ -3,6 +3,7 @@ type ProfilesRow = Database['public']['Tables']['profiles']['Row'];
 type ProjectsRow = Database['public']['Tables']['projects']['Row'];
 type ProjectsInsert = Database['public']['Tables']['projects']['Insert'];
 type ProjectsUpdate = Database['public']['Tables']['projects']['Update'];
+type ProjectInvitationRow = Database['public']['Tables']['project_invitations']['Row'];
 
 export interface SignupData {
   email: string;
@@ -155,51 +156,116 @@ export const projectsAPI = {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error('Not authenticated');
 
+    // Owned projects
     const { data: ownedProjectsData, error: ownedError } = await supabase
       .from('projects')
       .select('*')
       .eq('owner_id', user.id)
       .order('updated_at', { ascending: false });
-
     if (ownedError) throw ownedError;
-
     const ownedProjects = (ownedProjectsData ?? []) as ProjectsRow[];
 
-    const { data: profile, error: profileError } = await supabase
+    const { data: profile } = await supabase
       .from('profiles')
       .select('*')
       .eq('id', user.id)
       .maybeSingle<ProfilesRow>();
 
-    if (profileError) throw profileError;
+    let ownerDisplayName = user.user_metadata?.display_name || user.email || user.user_metadata?.username || 'Owner';
+    if (profile) ownerDisplayName = profile.display_name || profile.username || ownerDisplayName;
 
-    let ownerDisplayName =
-      user.user_metadata?.display_name || user.email || user.user_metadata?.username || 'Owner';
+    const projects: ProjectData[] = (ownedProjects ?? []).map(project => ({
+      id: project.id,
+      name: project.name,
+      description: project.description ?? undefined,
+      ownerId: project.owner_id,
+      ownerName: ownerDisplayName,
+      createdAt: project.created_at,
+      updatedAt: project.updated_at,
+      projectData: project.project_data,
+      access: { role: 'owner', status: 'active' },
+    }));
 
-    if (profile) {
-      ownerDisplayName = profile.display_name || profile.username || ownerDisplayName;
+    // Member projects
+    const { data: memberRows } = await supabase
+      .from('project_members')
+      .select('project_id, role')
+      .eq('user_id', user.id);
+    const memberProjectIds = Array.from(new Set((memberRows ?? []).map(r => r.project_id)));
+    for (const projectId of memberProjectIds) {
+      if (projects.some(p => p.id === projectId)) continue;
+      const { data: p } = await supabase
+        .from('projects')
+        .select('*')
+        .eq('id', projectId)
+        .maybeSingle<ProjectsRow>();
+      if (!p) continue;
+
+      let ownerDisplayName2 = '';
+      const { data: ownerProfile2 } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', p.owner_id)
+        .maybeSingle<ProfilesRow>();
+      ownerDisplayName2 = ownerProfile2?.display_name || ownerProfile2?.username || ownerDisplayName2;
+
+      const memberRole = (memberRows ?? []).find(r => r.project_id === projectId)?.role as 'viewer' | 'editor' | undefined;
+      projects.push({
+        id: p.id,
+        name: p.name,
+        description: p.description ?? undefined,
+        ownerId: p.owner_id,
+        ownerName: ownerDisplayName2,
+        createdAt: p.created_at,
+        updatedAt: p.updated_at,
+        projectData: p.project_data,
+        access: { role: (memberRole as any) || 'viewer', status: 'active' },
+      });
     }
 
-    const projects: ProjectData[] =
-      ownedProjects.map(project => ({
-        id: project.id,
-        name: project.name,
-        description: project.description ?? undefined,
-        ownerId: project.owner_id,
-        ownerName: ownerDisplayName,
-        createdAt: project.created_at,
-        updatedAt: project.updated_at,
-        projectData: project.project_data,
-        access: {
-          role: 'owner',
-          status: 'active',
-        },
-      })) ?? [];
+    // Invitations for current user
+    const { data: invitesData, error: invitesError } = await supabase
+      .from('project_invitations')
+      .select('*')
+      .eq('status', 'pending')
+      .eq('email', (user.email || '').toLowerCase());
+    if (invitesError) throw invitesError;
+    const invitations: ProjectInvitation[] = [];
+    const invitesTyped = (invitesData ?? []) as ProjectInvitationRow[];
+    for (const inv of invitesTyped) {
+      let name = '';
+      let description: string | undefined = undefined;
+      let ownerName = '';
+      const { data: p } = await supabase
+        .from('projects')
+        .select('*')
+        .eq('id', inv.project_id)
+        .maybeSingle<ProjectsRow>();
+      if (p) {
+        name = p.name;
+        description = p.description ?? undefined;
+        const { data: ownerProf } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', p.owner_id)
+          .maybeSingle<ProfilesRow>();
+        ownerName = ownerProf?.display_name || ownerProf?.username || '';
+      }
+      invitations.push({
+        id: inv.id,
+        projectId: inv.project_id,
+        email: inv.email,
+        role: inv.role,
+        status: inv.status,
+        invitedAt: inv.invited_at,
+        token: inv.token,
+        name,
+        description,
+        ownerName,
+      });
+    }
 
-    return {
-      projects,
-      invitations: [], // TODO: Implement invitations
-    };
+    return { projects, invitations };
   },
 
   async getById(projectId: string): Promise<{ project: ProjectData }> {
@@ -231,6 +297,18 @@ export const projectsAPI = {
       ownerName = ownerProfile?.display_name || ownerProfile?.username || ownerName;
     }
 
+    // Determine access role: owner or membership role
+    let accessRole: 'owner' | 'editor' | 'viewer' = project.owner_id === user.id ? 'owner' : 'viewer';
+    if (project.owner_id !== user.id) {
+      const { data: memberRow } = await supabase
+        .from('project_members')
+        .select('role')
+        .eq('project_id', project.id)
+        .eq('user_id', user.id)
+        .maybeSingle();
+      accessRole = (memberRow?.role as any) || 'viewer';
+    }
+
     return {
       project: {
         id: project.id,
@@ -242,7 +320,7 @@ export const projectsAPI = {
         updatedAt: project.updated_at,
         projectData: project.project_data,
         access: {
-          role: project.owner_id === user.id ? 'owner' : 'viewer',
+          role: accessRole,
           status: 'active',
         },
       },
@@ -352,40 +430,214 @@ export const projectsAPI = {
   },
 
   async share(projectId: string, userEmail: string, role: string = 'viewer') {
-    // TODO: Implement project sharing
-    return {
-      message: 'Project sharing not yet implemented',
-      member: null as any,
-      invitation: null as any,
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error('Not authenticated');
+
+    // Basic validation
+    const email = userEmail.trim().toLowerCase();
+    if (!email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
+      throw new Error('Please enter a valid email address');
+    }
+
+    // Load project for metadata
+    const { data: project } = await supabase
+      .from('projects')
+      .select('*')
+      .eq('id', projectId)
+      .maybeSingle<ProjectsRow>();
+    if (!project) throw new Error('Project not found');
+
+    // Create invitation in Supabase
+    const token = `inv_${Math.random().toString(36).slice(2)}_${Date.now()}`;
+    const { data: newInvite, error: inviteError } = await supabase
+      .from('project_invitations')
+      .insert({
+        project_id: projectId,
+        email,
+        role,
+        status: 'pending',
+        token,
+        inviter_id: user.id,
+      })
+      .select('*')
+      .maybeSingle();
+    if (inviteError) throw inviteError;
+
+    const newInviteRow = newInvite as ProjectInvitationRow;
+    const invitation: ProjectInvitation = {
+      id: newInviteRow.id,
+      projectId: projectId,
+      email,
+      role,
+      status: 'pending',
+      invitedAt: newInviteRow.invited_at,
+      token,
+      name: project.name,
+      description: project.description ?? undefined,
+      ownerName: user.user_metadata?.display_name || user.email || user.user_metadata?.username || 'Owner',
     };
+
+    return { message: 'Invitation sent', member: null as any, invitation };
   },
 
   async getMembers(projectId: string) {
-    // TODO: Implement get members
-    return {
-      owner: null,
-      members: [],
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error('Not authenticated');
+
+    // Fetch project to determine owner
+    const { data: project } = await supabase
+      .from('projects')
+      .select('*')
+      .eq('id', projectId)
+      .maybeSingle<ProjectsRow>();
+    if (!project) throw new Error('Project not found');
+
+    // Owner profile
+    const { data: ownerProfile } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', project.owner_id)
+      .maybeSingle<ProfilesRow>();
+    const owner: ProjectMember | null = {
+      id: project.owner_id,
+      username: ownerProfile?.username || '',
+      displayName: ownerProfile?.display_name || ownerProfile?.username || 'Owner',
+      email: '',
+      role: 'owner',
+      status: 'active',
+      joinedAt: project.created_at,
     };
+
+    // Members from Supabase
+    const { data: memberRows, error: membersError } = await supabase
+      .from('project_members')
+      .select('user_id, role, joined_at')
+      .eq('project_id', projectId);
+    if (membersError) throw membersError;
+
+    const members: ProjectMember[] = [];
+    for (const m of memberRows ?? []) {
+      const { data: prof } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', m.user_id)
+        .maybeSingle<ProfilesRow>();
+      members.push({
+        id: m.user_id,
+        username: prof?.username || '',
+        displayName: prof?.display_name || prof?.username || '',
+        email: '',
+        role: m.role,
+        status: 'active',
+        joinedAt: m.joined_at,
+      });
+    }
+
+    return { owner, members };
   },
 
   async updateMember(projectId: string, memberId: string, updates: Partial<Pick<ProjectMember, 'role' | 'status'>>) {
-    // TODO: Implement update member
-    return { message: 'Update member not yet implemented' };
+    const { role } = updates;
+    if (!role) return { message: 'No changes' };
+    const { error } = await supabase
+      .from('project_members')
+      .update({ role })
+      .eq('project_id', projectId)
+      .eq('user_id', memberId);
+    if (error) throw error;
+    return { message: 'Member updated' };
   },
 
   async removeMember(projectId: string, memberId: string) {
-    // TODO: Implement remove member
-    return { message: 'Remove member not yet implemented' };
+    const { error } = await supabase
+      .from('project_members')
+      .delete()
+      .eq('project_id', projectId)
+      .eq('user_id', memberId);
+    if (error) throw error;
+    return { message: 'Member removed' };
   },
 
   async listInvitations() {
-    // TODO: Implement list invitations
-    return { invitations: [] };
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error('Not authenticated');
+    const { data, error } = await supabase
+      .from('project_invitations')
+      .select('*')
+      .eq('status', 'pending')
+      .eq('email', (user.email || '').toLowerCase());
+    if (error) throw error;
+    const invitations: ProjectInvitation[] = [];
+    const dataTyped = (data ?? []) as ProjectInvitationRow[];
+    for (const inv of dataTyped) {
+      let name = '';
+      let description: string | undefined = undefined;
+      let ownerName = '';
+      const { data: p } = await supabase
+        .from('projects')
+        .select('*')
+        .eq('id', inv.project_id)
+        .maybeSingle<ProjectsRow>();
+      if (p) {
+        name = p.name;
+        description = p.description ?? undefined;
+        const { data: ownerProf } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', p.owner_id)
+          .maybeSingle<ProfilesRow>();
+        ownerName = ownerProf?.display_name || ownerProf?.username || '';
+      }
+      invitations.push({
+        id: inv.id,
+        projectId: inv.project_id,
+        email: inv.email,
+        role: inv.role,
+        status: inv.status,
+        invitedAt: inv.invited_at,
+        token: inv.token,
+        name,
+        description,
+        ownerName,
+      });
+    }
+    return { invitations };
   },
 
   async respondToInvitation(token: string, action: 'accept' | 'decline') {
-    // TODO: Implement respond to invitation
-    return { message: 'Respond to invitation not yet implemented' };
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error('Not authenticated');
+
+    const { data: inv, error } = await supabase
+      .from('project_invitations')
+      .select('*')
+      .eq('token', token)
+      .maybeSingle();
+    if (error) throw error;
+    if (!inv) throw new Error('Invitation not found');
+    const invRow = inv as ProjectInvitationRow;
+
+    if (action === 'decline') {
+      const { error: updErr } = await supabase
+        .from('project_invitations')
+        .update({ status: 'declined' })
+        .eq('id', invRow.id);
+      if (updErr) throw updErr;
+      return { message: 'Invitation declined' };
+    }
+
+    // Accept: add member and mark accepted
+    const { error: memberErr } = await supabase
+      .from('project_members')
+      .insert({ project_id: invRow.project_id, user_id: user.id, role: invRow.role || 'viewer' });
+    if (memberErr && !String(memberErr.message).includes('duplicate')) throw memberErr;
+
+    const { error: updErr } = await supabase
+      .from('project_invitations')
+      .update({ status: 'accepted', accepted_at: new Date().toISOString() })
+      .eq('id', invRow.id);
+    if (updErr) throw updErr;
+    return { message: 'Invitation accepted' };
   },
 
   async getActivity(projectId: string) {

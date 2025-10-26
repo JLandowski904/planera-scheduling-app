@@ -1,5 +1,6 @@
 import React, { useState, useCallback } from 'react';
 import { Edge, Node } from '../types';
+import { Edit, Trash2 } from 'lucide-react';
 
 interface EdgeComponentProps {
   edge: Edge;
@@ -9,6 +10,7 @@ interface EdgeComponentProps {
   onClick: (e: React.MouseEvent) => void;
   onDelete: () => void;
   onContextMenu: (e: React.MouseEvent) => void;
+  onEdit?: () => void;
 }
 
 const EdgeComponent: React.FC<EdgeComponentProps> = ({
@@ -19,8 +21,10 @@ const EdgeComponent: React.FC<EdgeComponentProps> = ({
   onClick,
   onDelete,
   onContextMenu,
+  onEdit,
 }) => {
   const [isHovered, setIsHovered] = useState(false);
+  const [isActionsHovered, setIsActionsHovered] = useState(false);
 
   const handleMouseEnter = useCallback(() => {
     setIsHovered(true);
@@ -122,15 +126,14 @@ const EdgeComponent: React.FC<EdgeComponentProps> = ({
   };
 
   const labelPos = getEdgeLabelPosition();
+  const showActions = isHovered || isActionsHovered;
 
   return (
-    <g>
+    <g onMouseEnter={handleMouseEnter} onMouseLeave={handleMouseLeave}>
       {/* Edge path */}
       <path
         d={getEdgePath()}
         className={getEdgeClasses()}
-        onMouseEnter={handleMouseEnter}
-        onMouseLeave={handleMouseLeave}
         onClick={handleClick}
         onContextMenu={handleContextMenu}
         style={{
@@ -143,8 +146,6 @@ const EdgeComponent: React.FC<EdgeComponentProps> = ({
       <path
         d={getArrowMarker()}
         className={getEdgeClasses()}
-        onMouseEnter={handleMouseEnter}
-        onMouseLeave={handleMouseLeave}
         onClick={handleClick}
         onContextMenu={handleContextMenu}
         style={{
@@ -203,14 +204,45 @@ const EdgeComponent: React.FC<EdgeComponentProps> = ({
           strokeWidth: 20,
           pointerEvents: 'stroke',
         }}
-        onMouseEnter={handleMouseEnter}
-        onMouseLeave={handleMouseLeave}
         onClick={handleClick}
         onContextMenu={handleContextMenu}
       />
+
+      {/* Hover action buttons (edit/delete) */}
+      {showActions && (
+        <foreignObject x={labelPos.x - 24} y={labelPos.y - 28} width={56} height={28} style={{ pointerEvents: 'auto' }}>
+          <div
+            style={{ display: 'flex', gap: 4, alignItems: 'center' }}
+            onMouseDown={(e) => e.stopPropagation()}
+            onClick={(e) => e.stopPropagation()}
+            onMouseEnter={() => setIsActionsHovered(true)}
+            onMouseLeave={() => setIsActionsHovered(false)}
+            className="no-print"
+          >
+            <button
+              className="node-action-button"
+              title="Edit dependency"
+              aria-label="Edit dependency"
+              onClick={() => onEdit && onEdit()}
+            >
+              <Edit className="w-3 h-3" />
+            </button>
+            <button
+              className="node-action-button node-action-button--danger"
+              title="Break dependency"
+              aria-label="Break dependency"
+              onClick={(e) => {
+                e.stopPropagation();
+                onDelete();
+              }}
+            >
+              <Trash2 className="w-3 h-3" />
+            </button>
+          </div>
+        </foreignObject>
+      )}
     </g>
   );
 };
 
 export default EdgeComponent;
-

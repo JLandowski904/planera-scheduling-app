@@ -6,7 +6,7 @@ import {
   ProjectActivityItem,
   ProjectComment,
   ProjectMember,
-  apiBaseUrl,
+  socketBaseUrl,
 } from '../services/api';
 import {
   List,
@@ -124,7 +124,7 @@ const ProjectCollaborationPanel: React.FC<ProjectCollaborationPanelProps> = ({
   }, [isOpen, loadActivity, loadComments, loadMembers]);
 
   useEffect(() => {
-    if (!isOpen) {
+    if (!isOpen || !socketBaseUrl) {
       if (socketRef.current) {
         socketRef.current.emit('leaveProject', { projectId });
         socketRef.current.disconnect();
@@ -133,7 +133,7 @@ const ProjectCollaborationPanel: React.FC<ProjectCollaborationPanelProps> = ({
       return;
     }
 
-    const socket = io(apiBaseUrl, {
+    const socket = io(socketBaseUrl, {
       transports: ['websocket'],
     });
 

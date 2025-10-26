@@ -749,6 +749,7 @@ const NodeDialog: React.FC<NodeDialogProps> = ({
             <option value="low">Low</option>
             <option value="med">Medium</option>
             <option value="high">High</option>
+            <option value="critical">Critical</option>
           </select>
         </div>
 

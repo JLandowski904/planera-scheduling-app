@@ -189,6 +189,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                   <option value="low">Low</option>
                   <option value="med">Medium</option>
                   <option value="high">High</option>
+                  <option value="critical">Critical</option>
                 </select>
               </div>
 
@@ -633,4 +634,3 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
 };
 
 export default PropertiesPanel;
-

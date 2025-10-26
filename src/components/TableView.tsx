@@ -195,10 +195,11 @@ const TableView: React.FC<TableViewProps> = ({
   const getPriorityBadge = (priority?: Priority) => {
     if (!priority) return null;
     
-    const priorityClasses = {
+    const priorityClasses: Record<Priority, string> = {
       low: 'priority-low',
       med: 'priority-med',
       high: 'priority-high',
+      critical: 'priority-critical',
     };
 
     return (

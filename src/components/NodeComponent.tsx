@@ -270,6 +270,9 @@ const NodeComponent: React.FC<NodeComponentProps> = ({
     if (type === 'task') {
       return (
         <div className="text-xs mt-1 space-y-1 text-left">
+          {data.priority === 'critical' && (
+            <div className="text-xs font-bold text-red-600">Critical</div>
+          )}
           {data.startDate && data.dueDate && (
             <div className="flex items-center gap-1">
               <Calendar className="w-3 h-3" />
@@ -292,10 +295,18 @@ const NodeComponent: React.FC<NodeComponentProps> = ({
   };
 
   const renderMilestoneInfo = () => {
-    if (type === 'milestone' && data.dueDate) {
+    if (type === 'milestone' && (data.dueDate || data.discipline || data.priority === 'critical')) {
       return (
-        <div className="text-xs mt-1 text-center">
-          <span>{formatDate(data.dueDate)}</span>
+        <div className="text-xs mt-1 text-center space-y-1">
+          {data.priority === 'critical' && (
+            <div className="text-xs font-bold text-red-600">Critical</div>
+          )}
+          {data.dueDate && (
+            <span>{formatDate(data.dueDate)}</span>
+          )}
+          {data.discipline && (
+            <div className="text-xs opacity-75">{data.discipline}</div>
+          )}
         </div>
       );
     }
@@ -303,16 +314,24 @@ const NodeComponent: React.FC<NodeComponentProps> = ({
   };
 
   const renderDeliverableInfo = () => {
-    if (type === 'deliverable' && (data.startDate || data.dueDate)) {
+    if (type === 'deliverable' && (data.startDate || data.dueDate || data.discipline || data.priority === 'critical')) {
       return (
-        <div className="text-xs mt-1 text-left">
-          {data.startDate && data.dueDate ? (
-            <span>{formatDate(data.startDate)} - {formatDate(data.dueDate)}</span>
-          ) : data.dueDate ? (
-            <span>{formatDate(data.dueDate)}</span>
-          ) : data.startDate ? (
-            <span>{formatDate(data.startDate)}</span>
-          ) : null}
+        <div className="text-xs mt-1 text-left space-y-1">
+          {data.priority === 'critical' && (
+            <div className="text-xs font-bold text-red-600">Critical</div>
+          )}
+          {(data.startDate || data.dueDate) && (
+            data.startDate && data.dueDate ? (
+              <span>{formatDate(data.startDate)} - {formatDate(data.dueDate)}</span>
+            ) : data.dueDate ? (
+              <span>{formatDate(data.dueDate)}</span>
+            ) : (
+              <span>{formatDate(data.startDate as Date)}</span>
+            )
+          )}
+          {data.discipline && (
+            <div className="text-xs opacity-75">{data.discipline}</div>
+          )}
         </div>
       );
     }

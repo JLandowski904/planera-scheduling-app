@@ -1,6 +1,6 @@
 export type NodeType = 'milestone' | 'deliverable' | 'task' | 'person';
 export type TaskStatus = 'not_started' | 'in_progress' | 'blocked' | 'done';
-export type Priority = 'low' | 'med' | 'high';
+export type Priority = 'low' | 'med' | 'high' | 'critical';
 export type DependencyType = 'finish_to_start' | 'start_to_start' | 'finish_to_finish';
 export type ViewType = 'whiteboard' | 'timeline' | 'table' | 'calendar';
 export interface Position {

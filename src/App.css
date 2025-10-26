@@ -457,6 +457,10 @@
   .priority-high {
     @apply bg-red-100 text-red-800;
   }
+
+  .priority-critical {
+    @apply bg-red-200 text-red-900 font-bold border border-red-300;
+  }
   
   .conflict-warning {
     @apply bg-red-50 border border-red-200 rounded-lg p-3 mb-2;
