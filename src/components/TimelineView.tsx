@@ -157,8 +157,12 @@ const TimelineView: React.FC<TimelineViewProps> = ({
     }
   };
 
+  const rowHeight = 60;
+  const minRows = 5;
+  const timelineContentHeight = Math.max(nodeTimelineData.length, minRows) * rowHeight;
+
   return (
-    <div className="timeline-view h-full flex flex-col bg-slate-50">
+    <div className="timeline-view h-full min-h-0 flex flex-col bg-slate-50">
       {/* Timeline filters */}
       <div className="bg-white border-b border-slate-200 p-4 no-print">
         <div className="flex items-center gap-4">
@@ -207,10 +211,13 @@ const TimelineView: React.FC<TimelineViewProps> = ({
       </div>
 
       {/* Timeline content */}
-      <div className="flex-1 overflow-auto">
+      <div className="flex-1 min-h-0 overflow-auto">
         <div className="flex">
           {/* Node list */}
-          <div className="w-64 border-r border-gray-200">
+          <div
+            className="w-64 border-r border-gray-200"
+            style={{ minHeight: timelineContentHeight }}
+          >
             {nodeTimelineData.map(({ node }) => (
               <div
                 key={node.id}
@@ -241,9 +248,12 @@ const TimelineView: React.FC<TimelineViewProps> = ({
           </div>
 
           {/* Timeline grid */}
-          <div className="flex-1 relative">
+          <div
+            className="flex-1 relative"
+            style={{ minHeight: timelineContentHeight }}
+          >
             {/* Grid lines */}
-            <div className="absolute inset-0">
+            <div className="absolute inset-0" style={{ minHeight: timelineContentHeight }}>
               {timelineColumns.map((_, index) => (
                 <div
                   key={index}
@@ -259,7 +269,7 @@ const TimelineView: React.FC<TimelineViewProps> = ({
                 key={node.id}
                 className="absolute top-0 h-12 flex items-center"
                 style={{
-                  top: `${index * 60}px`,
+                  top: `${index * rowHeight}px`,
                   left: `${leftPercent}%`,
                   width: `${widthPercent}%`,
                 }}
@@ -296,9 +306,9 @@ const TimelineView: React.FC<TimelineViewProps> = ({
               const targetIndex = nodeTimelineData.findIndex(d => d?.node.id === edge.target);
 
               const sourceX = sourceData.leftPercent + sourceData.widthPercent;
-              const sourceY = sourceIndex * 60 + 24; // Center of source bar
+              const sourceY = sourceIndex * rowHeight + 24; // Center of source bar
               const targetX = targetData.leftPercent;
-              const targetY = targetIndex * 60 + 24; // Center of target bar
+              const targetY = targetIndex * rowHeight + 24; // Center of target bar
 
               return (
                 <svg

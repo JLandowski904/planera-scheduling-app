@@ -117,7 +117,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({ project, selectedNodes, onN
   }, [project.nodes]);
 
   return (
-    <div className="calendar-view h-full flex flex-col bg-slate-50">
+    <div className="calendar-view h-full min-h-0 flex flex-col bg-slate-50">
       <div className="bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between">
         <div>
           <h2 className="text-lg font-semibold text-slate-900 flex items-center gap-2">
@@ -150,7 +150,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({ project, selectedNodes, onN
         </div>
       </div>
 
-      <div className="flex-1 overflow-auto p-6">
+      <div className="flex-1 min-h-0 overflow-auto p-6">
         <div className="grid grid-cols-7 gap-3">
           {WEEKDAY_LABELS.map(label => (
             <div key={label} className="text-xs font-semibold uppercase tracking-wide text-slate-500 px-2">

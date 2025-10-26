@@ -521,7 +521,7 @@ const ProjectView: React.FC = () => {
       currentView={project.viewSettings.currentView} 
       onViewChange={handleViewChange}
     >
-      <div className="h-full flex flex-col">
+      <div className="h-full min-h-0 flex flex-col">
         {/* Project Header */}
         <div className="bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between shadow-sm">
           <div className="flex items-center gap-4">
@@ -574,9 +574,9 @@ const ProjectView: React.FC = () => {
         </div>
 
         {/* Main Content */}
-        <div className="flex-1 overflow-hidden print-surface">
+        <div className="flex-1 min-h-0 overflow-auto print-surface">
           {project.viewSettings.currentView === 'whiteboard' && (
-            <div className="h-full flex flex-col print-area print-area--whiteboard">
+            <div className="h-full min-h-0 flex flex-col print-area print-area--whiteboard">
               <Canvas
                 project={project}
                 onProjectChange={handleProjectChange}
@@ -646,7 +646,7 @@ const ProjectView: React.FC = () => {
             </div>
           )}
           {project.viewSettings.currentView === 'timeline' && (
-            <div className="h-full flex flex-col print-area print-area--timeline">
+            <div className="h-full min-h-0 flex flex-col print-area print-area--timeline">
               <TimelineView
                 project={project}
                 onProjectChange={handleProjectChange}
@@ -660,7 +660,7 @@ const ProjectView: React.FC = () => {
             </div>
           )}
           {project.viewSettings.currentView === 'table' && (
-            <div className="h-full flex flex-col print-area print-area--table">
+            <div className="h-full min-h-0 flex flex-col print-area print-area--table">
               <TableView
                 project={project}
                 onProjectChange={handleProjectChange}
@@ -670,7 +670,7 @@ const ProjectView: React.FC = () => {
             </div>
           )}
           {project.viewSettings.currentView === 'calendar' && (
-            <div className="h-full flex flex-col print-area print-area--calendar">
+            <div className="h-full min-h-0 flex flex-col print-area print-area--calendar">
               <CalendarView
                 project={project}
                 selectedNodes={selectedNodes}

@@ -226,7 +226,7 @@ const TableView: React.FC<TableViewProps> = ({
   };
 
   return (
-    <div className="table-view h-full flex flex-col bg-slate-50">
+    <div className="table-view h-full min-h-0 flex flex-col bg-slate-50">
       {/* Table header with filters */}
       <div className="border-b border-slate-200 p-6 bg-white no-print">
         <div className="flex items-center gap-4 mb-4">
@@ -291,7 +291,7 @@ const TableView: React.FC<TableViewProps> = ({
       </div>
 
       {/* Table */}
-      <div className="flex-1 overflow-auto">
+      <div className="flex-1 min-h-0 overflow-auto">
         <table className="w-full">
           <thead className="bg-gray-50 sticky top-0">
             <tr>
