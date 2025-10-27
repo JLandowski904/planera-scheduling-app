@@ -4,6 +4,7 @@
 -- Drop existing policies and tables if they exist
 DROP POLICY IF EXISTS "Users can view project members" ON public.project_members;
 DROP POLICY IF EXISTS "Project owners can manage members" ON public.project_members;
+DROP POLICY IF EXISTS "Invitee can add self as member" ON public.project_members;
 DROP POLICY IF EXISTS "Users can view own projects" ON public.projects;
 DROP POLICY IF EXISTS "Users can create projects" ON public.projects;
 DROP POLICY IF EXISTS "Owners can update projects" ON public.projects;
@@ -147,6 +148,19 @@ CREATE POLICY "Project owners can manage members"
   ON public.project_members FOR ALL
   USING (public.is_project_owner(project_id, auth.uid()))
   WITH CHECK (public.is_project_owner(project_id, auth.uid()));
+
+-- Allow invited user to add themself as a member when accepting
+CREATE POLICY "Invitee can add self as member"
+  ON public.project_members FOR INSERT
+  WITH CHECK (
+    user_id = auth.uid()
+    AND EXISTS (
+      SELECT 1 FROM public.project_invitations i
+      WHERE i.project_id = project_id
+        AND lower(i.email) = lower(auth.jwt() ->> 'email')
+        AND i.status = 'pending'
+    )
+  );
 
 -- RLS Policies for project invitations
 CREATE POLICY "Project owners can create invitations"

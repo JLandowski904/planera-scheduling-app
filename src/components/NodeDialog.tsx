@@ -254,6 +254,8 @@ const NodeDialog: React.FC<NodeDialogProps> = ({
   onClose,
   onSubmit,
 }) => {
+  // Local editable node type for edit mode (enables toggling among task/deliverable/milestone)
+  const [selectedType, setSelectedType] = useState<NodeType>(nodeType);
   const [taskState, setTaskState] = useState<TaskFormState>(() =>
     buildDefaultTaskState(
       project,
@@ -272,6 +274,7 @@ const NodeDialog: React.FC<NodeDialogProps> = ({
 
   useEffect(() => {
     if (isOpen) {
+      setSelectedType(nodeType);
       setTaskState(
         buildDefaultTaskState(
           project,
@@ -306,8 +309,8 @@ const NodeDialog: React.FC<NodeDialogProps> = ({
       deliverable: 'deliverable',
       person: 'person',
     };
-    return `${verb} ${labelMap[nodeType]}`;
-  }, [mode, nodeType]);
+    return `${verb} ${labelMap[selectedType]}`;
+  }, [mode, selectedType]);
 
   const dependencyCandidates = useMemo(() => {
     return project.nodes
@@ -492,7 +495,7 @@ const NodeDialog: React.FC<NodeDialogProps> = ({
   const handleSubmit = (event: React.FormEvent) => {
     event.preventDefault();
 
-    if (nodeType === 'person') {
+    if (selectedType === 'person') {
       if (!personState.title.trim()) {
         return;
       }
@@ -539,7 +542,7 @@ const NodeDialog: React.FC<NodeDialogProps> = ({
       ...node?.data,
       id,
       title: taskState.title.trim(),
-      type: nodeType,
+      type: selectedType,
       startDate,
       dueDate,
       durationDays: taskState.duration,
@@ -553,11 +556,11 @@ const NodeDialog: React.FC<NodeDialogProps> = ({
 
     const updatedNode: Node = {
       id,
-      type: nodeType,
+      type: selectedType,
       title: taskState.title.trim(),
       position: node?.position ?? initialPosition ?? { x: 150, y: 150 },
-      width: node?.width ?? (nodeType === 'milestone' ? 80 : 140),
-      height: node?.height ?? (nodeType === 'milestone' ? 80 : 80),
+      width: node?.width ?? (selectedType === 'milestone' ? 80 : 140),
+      height: node?.height ?? (selectedType === 'milestone' ? 80 : 80),
       data: nodeData,
     };
 
@@ -582,7 +585,7 @@ const NodeDialog: React.FC<NodeDialogProps> = ({
           value={taskState.title}
           onChange={(e) => setTaskState(prev => ({ ...prev, title: e.target.value }))}
           className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-          placeholder={`Enter ${nodeType} name`}
+          placeholder={`Enter ${selectedType} name`}
           required
         />
       </div>
@@ -699,7 +702,7 @@ const NodeDialog: React.FC<NodeDialogProps> = ({
         )}
       </div>
 
-      {nodeType !== 'milestone' && (
+      {selectedType !== 'milestone' && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1">Status</label>
@@ -837,7 +840,63 @@ const NodeDialog: React.FC<NodeDialogProps> = ({
         </div>
 
         <form onSubmit={handleSubmit} className="px-6 py-5 space-y-4">
-          {nodeType === 'person' ? renderPersonFields() : renderTaskFields()}
+          {/* Type selector in edit mode (toggle among task/deliverable/milestone) */}
+          {mode === 'edit' && (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Type</label>
+                <div className="flex items-center gap-3">
+                  <select
+                  value={selectedType}
+                  onChange={(e) => {
+                    const next = e.target.value as NodeType;
+                    const prev = selectedType;
+
+                    // Confirmation when converting to or from Person, as it changes field model and can remove deps
+                    if ((next === 'person' && prev !== 'person') || (prev === 'person' && next !== 'person')) {
+                      const ok = window.confirm('Converting between Person and other types may remove dependencies and change available fields. Continue?');
+                      if (!ok) return;
+                      setSelectedType(next);
+                      if (next === 'person') {
+                        // Clear any predecessor/successor selection in the UI
+                        setTaskState(prevState => ({
+                          ...prevState,
+                          predecessorId: null,
+                          successorId: null,
+                        }));
+                      }
+                      return;
+                    }
+
+                    // Warn when switching to milestone (collapses duration and aligns dates)
+                    if (next === 'milestone' && prev !== 'milestone') {
+                      const ok = window.confirm('Switching to Milestone sets duration to 0 and aligns due date to start date. Continue?');
+                      if (!ok) return;
+                    }
+
+                    setSelectedType(next);
+                    if (next === 'milestone') {
+                      setTaskState(prevState => {
+                        const start = parseInputDate(prevState.startDate);
+                        const alignedDue = start ? toDateInputValue(start) : prevState.dueDate;
+                        return { ...prevState, duration: 0, dueDate: alignedDue };
+                      });
+                    }
+                  }}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="task">Task</option>
+                  <option value="deliverable">Deliverable</option>
+                  <option value="milestone">Milestone</option>
+                  <option value="person">Person</option>
+                </select>
+                  <span className="text-xs text-slate-500 whitespace-nowrap">Switch node type while editing.</span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {selectedType === 'person' ? renderPersonFields() : renderTaskFields()}
 
           <div className="flex items-center justify-end gap-3 pt-2">
             <button
