@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from './lib/simpleRouter';
 import Login from './pages/Login';
+import ResetPassword from './pages/ResetPassword';
 import Projects from './pages/Projects';
 import ProjectView from './pages/ProjectView';
 import { supabase } from './services/supabase';
+import { ThemeProvider } from './context/ThemeContext';
 import './App.css';
 
 const getHasToken = () => {
@@ -89,23 +91,29 @@ const App: React.FC = () => {
   }
 
   return (
-    <Router>
-      <Routes>
-        <Route 
-          path="/" 
-          element={isAuthenticated ? <Navigate to="/projects" /> : <Login />}
-        />
-        <Route 
-          path="/projects" 
-          element={isAuthenticated ? <Projects /> : <Navigate to="/" />}
-        />
-        <Route 
-          path="/project/:projectId" 
-          element={isAuthenticated ? <ProjectView /> : <Navigate to="/" />}
-        />
-        <Route path="*" element={<Navigate to="/" />} />
-      </Routes>
-    </Router>
+    <ThemeProvider initialTheme="light">
+      <Router>
+        <Routes>
+          <Route 
+            path="/" 
+            element={isAuthenticated ? <Navigate to="/projects" /> : <Login />}
+          />
+          <Route 
+            path="/reset-password" 
+            element={<ResetPassword />}
+          />
+          <Route 
+            path="/projects" 
+            element={isAuthenticated ? <Projects /> : <Navigate to="/" />}
+          />
+          <Route 
+            path="/project/:projectId" 
+            element={isAuthenticated ? <ProjectView /> : <Navigate to="/" />}
+          />
+          <Route path="*" element={<Navigate to="/" />} />
+        </Routes>
+      </Router>
+    </ThemeProvider>
   );
 };
 

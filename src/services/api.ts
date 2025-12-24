@@ -1,3 +1,5 @@
+import { authAPI as supabaseAuthAPI, projectsAPI as supabaseProjectsAPI } from './supabaseApi';
+
 export interface SignupData {
   email: string;
   username: string;
@@ -101,7 +103,13 @@ export interface ProjectComment {
 // Removed unused local projectsAPIImpl (Supabase API is used)
 
 // Use Supabase API instead of Express backend
-export { authAPI, projectsAPI } from './supabaseApi';
+// Re-export with updateTheme added to authAPI
+export const authAPI = {
+  ...supabaseAuthAPI,
+  updateTheme: supabaseAuthAPI.updateTheme,
+};
+
+export const projectsAPI = supabaseProjectsAPI;
 
 // Optional: socket server base URL for realtime via socket.io (not Supabase)
 // Leave empty in Vercel/Supabase-only deployments to disable socket.io.

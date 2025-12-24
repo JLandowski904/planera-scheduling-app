@@ -546,19 +546,19 @@ const ProjectView: React.FC = () => {
     >
       <div className="h-full min-h-0 flex flex-col">
         {/* Project Header */}
-        <div className="bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between shadow-sm">
+        <div className="bg-white dark:bg-slate-800 border-b border-gray-200 dark:border-slate-700 px-6 py-4 flex items-center justify-between shadow-sm dark:shadow-slate-900/50">
           <div className="flex items-center gap-4">
             <button
               onClick={() => navigate('/projects')}
-              className="p-2 hover:bg-gray-100 rounded-lg transition no-print"
+              className="p-2 hover:bg-gray-100 dark:hover:bg-slate-700 rounded-lg transition no-print"
               title="Back to Projects"
             >
-              <ArrowLeft className="w-5 h-5 text-gray-600" />
+              <ArrowLeft className="w-5 h-5 text-gray-600 dark:text-slate-300" />
             </button>
             <div>
-              <h1 className="text-2xl font-bold text-gray-900">{project.name}</h1>
+              <h1 className="text-2xl font-bold text-gray-900 dark:text-slate-100">{project.name}</h1>
               {project.description && (
-                <p className="text-sm text-gray-500 mt-1">{project.description}</p>
+                <p className="text-sm text-gray-500 dark:text-slate-400 mt-1">{project.description}</p>
               )}
             </div>
           </div>
@@ -569,7 +569,7 @@ const ProjectView: React.FC = () => {
                 setCollaborationInitialTab('activity');
                 setCollaborationOpen(true);
               }}
-              className="flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition font-medium no-print"
+              className="flex items-center gap-2 px-4 py-2 border border-gray-300 dark:border-slate-600 rounded-lg hover:bg-gray-50 dark:hover:bg-slate-700 transition font-medium text-gray-700 dark:text-slate-200 no-print"
               title="Open collaboration tools"
             >
               <Users className="w-4 h-4" />
@@ -580,7 +580,7 @@ const ProjectView: React.FC = () => {
                 setCollaborationInitialTab('members');
                 setCollaborationOpen(true);
               }}
-              className="flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition font-medium no-print"
+              className="flex items-center gap-2 px-4 py-2 border border-gray-300 dark:border-slate-600 rounded-lg hover:bg-gray-50 dark:hover:bg-slate-700 transition font-medium text-gray-700 dark:text-slate-200 no-print"
               title="Share this project with others"
             >
               <Share2 className="w-4 h-4" />

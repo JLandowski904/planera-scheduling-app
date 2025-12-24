@@ -158,6 +158,20 @@ export const authAPI = {
     const { data: { session } } = await supabase.auth.getSession();
     return session;
   },
+
+  async updateTheme(theme: 'light' | 'dark') {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error('Not authenticated');
+
+    const { error } = await supabase
+      .from('profiles')
+      .update({ theme })
+      .eq('id', user.id);
+
+    if (error) throw error;
+
+    return { message: 'Theme updated successfully' };
+  },
 };
 
 // Projects API using Supabase
@@ -413,11 +427,11 @@ export const projectsAPI = {
       updateData.description = metadata.description ?? null;
     }
 
+    // Rely on RLS to authorize owners and editors; don't force owner_id match here
     const { error } = await supabase
       .from('projects')
       .update(updateData)
-      .eq('id', projectId)
-      .eq('owner_id', user.id);
+      .eq('id', projectId);
 
     if (error) throw error;
 

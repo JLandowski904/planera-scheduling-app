@@ -38,16 +38,16 @@ const navigationItems: NavItem[] = [
 
 const AppSidebar: React.FC<AppSidebarProps> = ({ currentView, onViewChange }) => {
   return (
-    <div className="app-sidebar w-64 bg-white border-r border-slate-200 flex flex-col no-print">
+    <div className="app-sidebar w-64 bg-white dark:bg-slate-800 border-r border-slate-200 dark:border-slate-700 flex flex-col no-print transition-colors">
       {/* Brand Header */}
-      <div className="border-b border-slate-200 p-6">
+      <div className="border-b border-slate-200 dark:border-slate-700 p-6">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-gradient-to-br from-slate-700 to-slate-900 rounded-xl flex items-center justify-center shadow-lg">
+          <div className="w-10 h-10 bg-gradient-to-br from-slate-700 to-slate-900 dark:from-slate-600 dark:to-slate-800 rounded-xl flex items-center justify-center shadow-lg">
             <Grid className="w-6 h-6 text-white" />
           </div>
           <div>
-            <h2 className="font-bold text-slate-900 text-lg">Plandango</h2>
-            <p className="text-xs text-slate-500">Project Scheduler</p>
+            <h2 className="font-bold text-slate-900 dark:text-slate-100 text-lg">Plandango</h2>
+            <p className="text-xs text-slate-500 dark:text-slate-400">Project Scheduler</p>
           </div>
         </div>
       </div>
@@ -55,7 +55,7 @@ const AppSidebar: React.FC<AppSidebarProps> = ({ currentView, onViewChange }) =>
       {/* Navigation */}
       <nav className="p-3 flex-1">
         <div className="mb-2">
-          <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider px-3 py-2">
+          <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider px-3 py-2">
             Navigation
           </p>
         </div>
@@ -70,8 +70,8 @@ const AppSidebar: React.FC<AppSidebarProps> = ({ currentView, onViewChange }) =>
                 transition-all duration-200
                 ${
                   currentView === item.view
-                    ? 'bg-slate-100 text-slate-900 font-medium'
-                    : 'text-slate-600 hover:bg-slate-100'
+                    ? 'bg-slate-100 dark:bg-slate-700 text-slate-900 dark:text-slate-100 font-medium'
+                    : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700'
                 }
               `}
             >

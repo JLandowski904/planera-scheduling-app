@@ -1,5 +1,14 @@
 import { Project, Node, Edge, DependencyType } from '../types';
-import { addDays, differenceInDays, isAfter } from 'date-fns';
+import { addDays, differenceInDays, isAfter, startOfMonth, endOfMonth, startOfWeek, endOfWeek, startOfDay, endOfDay, format, addMonths, addWeeks } from 'date-fns';
+
+export type TimelineScale = 'month' | 'week' | 'day';
+
+export interface TimeBucket {
+  start: Date;
+  end: Date;
+  label: string;
+  groupLabel?: string; // For day view, this is the month grouping
+}
 
 export interface SchedulingResult {
   updatedNodes: Node[];
@@ -448,6 +457,137 @@ const topologicalSort = (nodes: Node[], edges: Edge[]): Node[] => {
   }
   
   return result;
+};
+
+/**
+ * Generate time buckets for the timeline based on scale
+ */
+export const getTimeBuckets = (
+  visibleStart: Date,
+  visibleEnd: Date,
+  scale: TimelineScale
+): TimeBucket[] => {
+  const buckets: TimeBucket[] = [];
+  
+  switch (scale) {
+    case 'month': {
+      let current = startOfMonth(visibleStart);
+      const end = endOfMonth(visibleEnd);
+      
+      while (current <= end) {
+        const monthEnd = endOfMonth(current);
+        buckets.push({
+          start: current,
+          end: monthEnd,
+          label: format(current, 'MMM yyyy'),
+        });
+        current = addMonths(current, 1);
+      }
+      break;
+    }
+    
+    case 'week': {
+      let current = startOfWeek(visibleStart);
+      const end = endOfWeek(visibleEnd);
+      
+      while (current <= end) {
+        const weekEnd = endOfWeek(current);
+        buckets.push({
+          start: current,
+          end: weekEnd,
+          label: format(current, 'MMM d'),
+        });
+        current = addWeeks(current, 1);
+      }
+      break;
+    }
+    
+    case 'day': {
+      let current = startOfDay(visibleStart);
+      const end = endOfDay(visibleEnd);
+      let lastMonth = '';
+      
+      while (current <= end) {
+        const dayEnd = endOfDay(current);
+        const monthLabel = format(current, 'MMM yyyy');
+        
+        buckets.push({
+          start: current,
+          end: dayEnd,
+          label: format(current, 'd'),
+          groupLabel: monthLabel !== lastMonth ? monthLabel : undefined,
+        });
+        
+        lastMonth = monthLabel;
+        current = addDays(current, 1);
+      }
+      break;
+    }
+  }
+  
+  return buckets;
+};
+
+/**
+ * Get the x position for a date in the timeline
+ */
+export const getXPositionForDate = (
+  date: Date,
+  visibleStart: Date,
+  visibleEnd: Date,
+  totalWidth: number
+): number => {
+  const totalDays = differenceInDays(visibleEnd, visibleStart);
+  const daysSinceStart = differenceInDays(date, visibleStart);
+  return (daysSinceStart / totalDays) * totalWidth;
+};
+
+/**
+ * Get the width for a date range in the timeline
+ */
+export const getWidthForDateRange = (
+  startDate: Date,
+  endDate: Date,
+  visibleStart: Date,
+  visibleEnd: Date,
+  totalWidth: number
+): number => {
+  const duration = differenceInDays(endDate, startDate) + 1; // +1 to include end day
+  const totalDays = differenceInDays(visibleEnd, visibleStart);
+  return (duration / totalDays) * totalWidth;
+};
+
+/**
+ * Calculate appropriate visible date range based on nodes and padding
+ */
+export const calculateVisibleDateRange = (
+  nodes: Node[],
+  paddingDays: number = 7
+): { start: Date; end: Date } => {
+  const nodesWithDates = nodes.filter(node => 
+    node.data.startDate || node.data.dueDate
+  );
+
+  if (nodesWithDates.length === 0) {
+    const today = new Date();
+    return {
+      start: addDays(today, -30),
+      end: addDays(today, 90),
+    };
+  }
+
+  const dates = nodesWithDates.flatMap(node => [
+    node.data.startDate,
+    node.data.dueDate,
+  ]).filter(Boolean) as Date[];
+
+  const start = new Date(Math.min(...dates.map(d => d.getTime())));
+  const end = new Date(Math.max(...dates.map(d => d.getTime())));
+
+  return {
+    start: addDays(start, -paddingDays),
+    end: addDays(end, paddingDays),
+  };
 };
 
 

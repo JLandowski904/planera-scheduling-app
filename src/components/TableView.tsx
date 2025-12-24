@@ -227,19 +227,19 @@ const TableView: React.FC<TableViewProps> = ({
   };
 
   return (
-    <div className="table-view h-full min-h-0 flex flex-col bg-slate-50">
+    <div className="table-view h-full min-h-0 flex flex-col bg-slate-50 dark:bg-slate-900">
       {/* Table header with filters */}
-      <div className="border-b border-slate-200 p-6 bg-white no-print">
+      <div className="border-b border-slate-200 dark:border-slate-700 p-6 bg-white dark:bg-slate-800 no-print">
         <div className="flex items-center gap-4 mb-4">
           {/* Search */}
           <div className="relative flex-1 max-w-md">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400 dark:text-slate-500" />
             <input
               type="text"
               placeholder="Search nodes..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-slate-600 rounded-md text-sm bg-white dark:bg-slate-700 text-gray-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
 
@@ -247,7 +247,7 @@ const TableView: React.FC<TableViewProps> = ({
           <select
             value={filterStatus}
             onChange={(e) => setFilterStatus(e.target.value as TaskStatus | 'all')}
-            className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md text-sm bg-white dark:bg-slate-700 text-gray-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
             <option value="all">All Statuses</option>
             {getUniqueValues('status').map(status => (
@@ -261,7 +261,7 @@ const TableView: React.FC<TableViewProps> = ({
           <select
             value={filterType}
             onChange={(e) => setFilterType(e.target.value)}
-            className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md text-sm bg-white dark:bg-slate-700 text-gray-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
             <option value="all">All Types</option>
             {getUniqueValues('type').map(type => (
@@ -275,7 +275,7 @@ const TableView: React.FC<TableViewProps> = ({
           <select
             value={filterPhase}
             onChange={(e) => setFilterPhase(e.target.value)}
-            className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md text-sm bg-white dark:bg-slate-700 text-gray-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
             <option value="all">All Phases</option>
             {project.phases.map(phase => (
@@ -286,7 +286,7 @@ const TableView: React.FC<TableViewProps> = ({
           </select>
         </div>
 
-        <div className="text-sm text-gray-600">
+        <div className="text-sm text-gray-600 dark:text-slate-400">
           Showing {filteredAndSortedNodes.length} of {project.nodes.length} nodes
         </div>
       </div>
@@ -294,7 +294,7 @@ const TableView: React.FC<TableViewProps> = ({
       {/* Table */}
       <div className="flex-1 min-h-0 overflow-auto">
         <table className="w-full">
-          <thead className="bg-gray-50 sticky top-0">
+          <thead className="bg-gray-50 dark:bg-slate-800 sticky top-0">
             <tr>
               <th className="table-header w-8">
                 <input
@@ -306,7 +306,7 @@ const TableView: React.FC<TableViewProps> = ({
                 />
               </th>
               <th 
-                className="table-header cursor-pointer hover:bg-gray-100"
+                className="table-header cursor-pointer hover:bg-gray-100 dark:hover:bg-slate-700"
                 onClick={() => handleSort('title')}
               >
                 <div className="flex items-center gap-1">
@@ -315,7 +315,7 @@ const TableView: React.FC<TableViewProps> = ({
                 </div>
               </th>
               <th 
-                className="table-header cursor-pointer hover:bg-gray-100"
+                className="table-header cursor-pointer hover:bg-gray-100 dark:hover:bg-slate-700"
                 onClick={() => handleSort('type')}
               >
                 <div className="flex items-center gap-1">
@@ -324,7 +324,7 @@ const TableView: React.FC<TableViewProps> = ({
                 </div>
               </th>
               <th 
-                className="table-header cursor-pointer hover:bg-gray-100"
+                className="table-header cursor-pointer hover:bg-gray-100 dark:hover:bg-slate-700"
                 onClick={() => handleSort('phase')}
               >
                 <div className="flex items-center gap-1">
@@ -333,7 +333,7 @@ const TableView: React.FC<TableViewProps> = ({
                 </div>
               </th>
               <th 
-                className="table-header cursor-pointer hover:bg-gray-100"
+                className="table-header cursor-pointer hover:bg-gray-100 dark:hover:bg-slate-700"
                 onClick={() => handleSort('status')}
               >
                 <div className="flex items-center gap-1">
@@ -342,7 +342,7 @@ const TableView: React.FC<TableViewProps> = ({
                 </div>
               </th>
               <th 
-                className="table-header cursor-pointer hover:bg-gray-100"
+                className="table-header cursor-pointer hover:bg-gray-100 dark:hover:bg-slate-700"
                 onClick={() => handleSort('priority')}
               >
                 <div className="flex items-center gap-1">
@@ -351,7 +351,7 @@ const TableView: React.FC<TableViewProps> = ({
                 </div>
               </th>
               <th 
-                className="table-header cursor-pointer hover:bg-gray-100"
+                className="table-header cursor-pointer hover:bg-gray-100 dark:hover:bg-slate-700"
                 onClick={() => handleSort('startDate')}
               >
                 <div className="flex items-center gap-1">
@@ -360,7 +360,7 @@ const TableView: React.FC<TableViewProps> = ({
                 </div>
               </th>
               <th 
-                className="table-header cursor-pointer hover:bg-gray-100"
+                className="table-header cursor-pointer hover:bg-gray-100 dark:hover:bg-slate-700"
                 onClick={() => handleSort('dueDate')}
               >
                 <div className="flex items-center gap-1">
@@ -369,7 +369,7 @@ const TableView: React.FC<TableViewProps> = ({
                 </div>
               </th>
               <th 
-                className="table-header cursor-pointer hover:bg-gray-100"
+                className="table-header cursor-pointer hover:bg-gray-100 dark:hover:bg-slate-700"
                 onClick={() => handleSort('discipline')}
               >
                 <div className="flex items-center gap-1">
@@ -378,7 +378,7 @@ const TableView: React.FC<TableViewProps> = ({
                 </div>
               </th>
               <th 
-                className="table-header cursor-pointer hover:bg-gray-100"
+                className="table-header cursor-pointer hover:bg-gray-100 dark:hover:bg-slate-700"
                 onClick={() => handleSort('assignees')}
               >
                 <div className="flex items-center gap-1">
@@ -395,9 +395,9 @@ const TableView: React.FC<TableViewProps> = ({
               <tr
                 key={node.id}
                 className={`timeline-row cursor-pointer ${
-                  selectedNodes.includes(node.id) ? 'bg-blue-50' : ''
+                  selectedNodes.includes(node.id) ? 'bg-blue-50 dark:bg-blue-900/30' : ''
                 } ${
-                  node.data.status === 'done' ? 'opacity-60 bg-gray-50' : ''
+                  node.data.status === 'done' ? 'opacity-60 bg-gray-50 dark:bg-slate-800' : ''
                 }`}
                 onClick={() => onNodeSelect(node.id)}
               >

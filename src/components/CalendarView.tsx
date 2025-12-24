@@ -30,11 +30,6 @@ const TYPE_STYLES: Record<Node['type'], string> = {
   person: 'border-slate-400 bg-slate-50 text-slate-600',
 };
 
-const KIND_LABEL: Record<EventKind, string> = {
-  start: 'Start',
-  due: 'Due',
-};
-
 const getInitialMonth = (project: Project): Date => {
   const allDates = project.nodes.flatMap(node => {
     const dates: Date[] = [];
@@ -117,14 +112,14 @@ const CalendarView: React.FC<CalendarViewProps> = ({ project, selectedNodes, onN
   }, [project.nodes]);
 
   return (
-    <div className="calendar-view h-full min-h-0 flex flex-col bg-slate-50">
-      <div className="bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between">
+    <div className="calendar-view h-full min-h-0 flex flex-col bg-slate-50 dark:bg-slate-900">
+      <div className="bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 px-6 py-4 flex items-center justify-between">
         <div>
-          <h2 className="text-lg font-semibold text-slate-900 flex items-center gap-2">
+          <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-2">
             <CalendarDays className="w-5 h-5 text-slate-500" />
             {format(currentMonth, 'MMMM yyyy')}
           </h2>
-          <p className="text-sm text-slate-500">
+          <p className="text-sm text-slate-500 dark:text-slate-400">
             Tasks, milestones, and deliverables with dates appear on this calendar.
           </p>
         </div>
@@ -153,7 +148,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({ project, selectedNodes, onN
       <div className="flex-1 min-h-0 overflow-auto p-6">
         <div className="grid grid-cols-7 gap-3">
           {WEEKDAY_LABELS.map(label => (
-            <div key={label} className="text-xs font-semibold uppercase tracking-wide text-slate-500 px-2">
+            <div key={label} className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 px-2">
               {label}
             </div>
           ))}
@@ -170,8 +165,8 @@ const CalendarView: React.FC<CalendarViewProps> = ({ project, selectedNodes, onN
               <div
                 key={dayKey}
                 className={clsx(
-                  'min-h-[120px] rounded-xl border p-2 flex flex-col bg-white transition',
-                  isCurrentMonth ? 'border-slate-200' : 'border-slate-100 bg-slate-50',
+                  'min-h-[100px] rounded-xl border p-2 flex flex-col bg-white dark:bg-slate-800 transition',
+                  isCurrentMonth ? 'border-slate-200 dark:border-slate-600' : 'border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-850',
                   isToday && 'ring-1 ring-blue-500'
                 )}
               >
@@ -179,34 +174,33 @@ const CalendarView: React.FC<CalendarViewProps> = ({ project, selectedNodes, onN
                   <span
                     className={clsx(
                       'text-sm font-medium',
-                      isCurrentMonth ? 'text-slate-800' : 'text-slate-400'
+                      isCurrentMonth ? 'text-slate-800 dark:text-slate-200' : 'text-slate-400 dark:text-slate-600'
                     )}
                   >
                     {format(day, 'd')}
                   </span>
                   {events.length > 0 && (
-                    <span className="text-xs text-slate-400">{events.length} item{events.length > 1 ? 's' : ''}</span>
+                    <span className="text-xs text-slate-400 dark:text-slate-500">{events.length} item{events.length > 1 ? 's' : ''}</span>
                   )}
                 </div>
 
-                <div className="space-y-2 overflow-hidden">
+                <div className="space-y-1 overflow-hidden">
                   {events.map(event => (
                     <button
                       key={event.id}
                       onClick={() => onNodeSelect(event.nodeId)}
                       className={clsx(
-                        'w-full text-left text-xs px-2 py-1 rounded-lg border-l-4 transition focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-blue-500',
+                        'w-full text-left text-xs px-2 py-1 rounded border-l-4 transition focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-blue-500',
                         TYPE_STYLES[event.nodeType],
                         selectedNodes.includes(event.nodeId) && 'ring-2 ring-offset-1 ring-blue-500'
                       )}
                     >
-                      <div className="font-semibold truncate">{event.title}</div>
-                      <div className="text-[10px] uppercase tracking-wide">{KIND_LABEL[event.kind]}</div>
+                      <div className="font-medium truncate leading-tight">{event.title}</div>
                     </button>
                   ))}
 
                   {events.length === 0 && (
-                    <div className="text-xs text-slate-300 italic">
+                    <div className="text-xs text-slate-300 dark:text-slate-600 italic">
                       No items
                     </div>
                   )}

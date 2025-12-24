@@ -6,6 +6,7 @@ import CanvasToolbar from './CanvasToolbar';
 import { getNodeById } from '../utils/projectUtils';
 import { formatPhaseDateRange, getNodesInPhase, getPhaseBackgroundColor, getPhaseDateRange } from '../utils/phaseUtils';
 import PhaseComponent from './PhaseComponent';
+import { useTheme } from '../context/ThemeContext';
 
 interface CanvasProps {
   project: Project;
@@ -65,6 +66,7 @@ const Canvas: React.FC<CanvasProps> = ({
   onEditPhase,
   onDeletePhase,
 }) => {
+  const { theme } = useTheme();
   const canvasRef = useRef<HTMLDivElement>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [isPanning, setIsPanning] = useState(false);
@@ -588,7 +590,7 @@ const Canvas: React.FC<CanvasProps> = ({
   return (
       <div
         ref={canvasRef}
-        className="w-full h-full relative overflow-hidden bg-slate-50 whiteboard-canvas"
+        className="w-full h-full relative overflow-hidden bg-slate-50 dark:bg-slate-900 whiteboard-canvas"
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
@@ -596,7 +598,7 @@ const Canvas: React.FC<CanvasProps> = ({
         onClick={onCanvasClick}
         style={{
           cursor: isPanning ? 'grabbing' : linkMode ? 'crosshair' : 'grab',
-          backgroundImage: showGrid ? `radial-gradient(circle, #cbd5e1 1px, transparent 1px)` : 'none',
+          backgroundImage: showGrid ? `radial-gradient(circle, ${theme === 'dark' ? '#475569' : '#cbd5e1'} 1px, transparent 1px)` : 'none',
           backgroundSize: showGrid ? `${gridSize * zoom}px ${gridSize * zoom}px` : 'auto',
           backgroundPosition: showGrid ? `${pan.x}px ${pan.y}px` : '0 0',
         }}

@@ -1,10 +1,12 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from '../lib/simpleRouter';
-import { Plus, Trash2, LogOut, Users, Clock, MailPlus, Check, XCircle, Loader2, Copy } from 'lucide-react';
+import { Plus, Trash2, LogOut, Users, Clock, MailPlus, Check, XCircle, Loader2, Copy, Sun, Moon } from 'lucide-react';
 import { authAPI, projectsAPI, ProjectData, ProjectInvitation } from '../services/api';
+import { useTheme } from '../context/ThemeContext';
 
 const Projects: React.FC = () => {
   const navigate = useNavigate();
+  const { theme, toggleTheme } = useTheme();
   const [projects, setProjects] = useState<ProjectData[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -176,29 +178,55 @@ const Projects: React.FC = () => {
     });
   };
 
+  const handleToggleTheme = async () => {
+    const newTheme = theme === 'light' ? 'dark' : 'light';
+    toggleTheme();
+    
+    // Save to Supabase (don't block UI if it fails)
+    try {
+      await authAPI.updateTheme(newTheme);
+    } catch (error) {
+      console.warn('Failed to save theme preference:', error);
+    }
+  };
+
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50 dark:bg-slate-900 transition-colors">
       {/* Header */}
-      <header className="bg-white shadow">
+      <header className="bg-white dark:bg-slate-800 shadow dark:shadow-slate-700/50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900">Your Projects</h1>
-            <p className="text-sm text-gray-600 mt-1">Welcome{currentUserName ? `, ${currentUserName}` : ''}</p>
+            <h1 className="text-3xl font-bold text-gray-900 dark:text-slate-100">Your Projects</h1>
+            <p className="text-sm text-gray-600 dark:text-slate-400 mt-1">Welcome{currentUserName ? `, ${currentUserName}` : ''}</p>
           </div>
-          <button
-            onClick={handleLogout}
-            className="flex items-center gap-2 px-4 py-2 text-gray-600 hover:text-gray-900 border border-gray-300 rounded-lg transition"
-          >
-            <LogOut className="w-4 h-4" />
-            Logout
-          </button>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={handleToggleTheme}
+              className="p-2 rounded-lg bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors"
+              aria-label={`Switch to ${theme === 'light' ? 'dark' : 'light'} mode`}
+              title={`Switch to ${theme === 'light' ? 'dark' : 'light'} mode`}
+            >
+              {theme === 'light' ? (
+                <Moon className="w-5 h-5" />
+              ) : (
+                <Sun className="w-5 h-5" />
+              )}
+            </button>
+            <button
+              onClick={handleLogout}
+              className="flex items-center gap-2 px-4 py-2 text-gray-600 dark:text-slate-300 hover:text-gray-900 dark:hover:text-slate-100 border border-gray-300 dark:border-slate-600 rounded-lg transition"
+            >
+              <LogOut className="w-4 h-4" />
+              Logout
+            </button>
+          </div>
         </div>
       </header>
 
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {error && (
-          <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700">
+          <div className="mb-4 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg text-red-700 dark:text-red-400">
             <div className="flex items-center justify-between">
               <div>
                 <span>{error}</span>
