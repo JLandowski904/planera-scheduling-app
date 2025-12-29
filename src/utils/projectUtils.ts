@@ -10,6 +10,7 @@ export const createDefaultProject = (): Project => ({
   nodes: [],
   edges: [],
   phases: [],
+  assignees: [], // Project-scoped assignee names
   viewSettings: {
     currentView: 'whiteboard' as ViewType,
     zoom: 1,
@@ -58,8 +59,7 @@ export const createSampleProject = (): Project => {
     status: 'in_progress' as TaskStatus,
     priority: 'high' as Priority,
     percentComplete: 30,
-    assignees: [survey.id],
-    discipline: 'Survey',
+    assignees: ['Survey'], // Changed from person IDs to assignee names
     tags: ['Survey'],
   });
 
@@ -69,8 +69,7 @@ export const createSampleProject = (): Project => {
     status: 'not_started' as TaskStatus,
     priority: 'med' as Priority,
     percentComplete: 0,
-    assignees: [civil.id],
-    discipline: 'Civil',
+    assignees: ['Civil'], // Changed from person IDs to assignee names
     tags: ['Geotech'],
   });
 
@@ -80,8 +79,7 @@ export const createSampleProject = (): Project => {
     status: 'not_started' as TaskStatus,
     priority: 'high' as Priority,
     percentComplete: 0,
-    assignees: [civil.id],
-    discipline: 'Civil',
+    assignees: ['Civil'], // Changed from person IDs to assignee names
     tags: ['Utility'],
   });
 
@@ -91,8 +89,7 @@ export const createSampleProject = (): Project => {
     status: 'not_started' as TaskStatus,
     priority: 'med' as Priority,
     percentComplete: 0,
-    assignees: [stormwater.id],
-    discipline: 'Stormwater',
+    assignees: ['Stormwater'], // Changed from person IDs to assignee names
     tags: ['Modeling'],
   });
 
@@ -102,8 +99,7 @@ export const createSampleProject = (): Project => {
     status: 'not_started' as TaskStatus,
     priority: 'high' as Priority,
     percentComplete: 0,
-    assignees: [civil.id, pm.id],
-    discipline: 'Civil',
+    assignees: ['Civil'], // Changed from person IDs to assignee names - multiple removed for simplicity
     tags: ['Plan Set'],
   });
 
@@ -113,8 +109,7 @@ export const createSampleProject = (): Project => {
     status: 'not_started' as TaskStatus,
     priority: 'high' as Priority,
     percentComplete: 0,
-    assignees: [pm.id],
-    discipline: 'Civil',
+    assignees: [], // No assignees for this task
     tags: ['Review', 'Permit'],
   });
 
@@ -156,6 +151,7 @@ export const createSampleProject = (): Project => {
     nodes,
     edges,
     phases: [],
+    assignees: ['Survey', 'Civil', 'Stormwater'], // Project-scoped assignee names
     viewSettings: {
       currentView: 'whiteboard' as ViewType,
       zoom: 0.8,
@@ -181,7 +177,7 @@ export const createSampleProject = (): Project => {
         {
           id: 'civil-only',
           name: 'Civil Only',
-          filters: { disciplines: ['Civil'] },
+          filters: { assignees: ['Civil'] }, // Updated to use assignees
         },
         {
           id: 'blocked-items',

@@ -7,6 +7,16 @@ import { getNodeById } from '../utils/projectUtils';
 import { formatPhaseDateRange, getNodesInPhase, getPhaseBackgroundColor, getPhaseDateRange } from '../utils/phaseUtils';
 import PhaseComponent from './PhaseComponent';
 import { useTheme } from '../context/ThemeContext';
+import {
+  getNodeConnectionPoint,
+  getClosestHandle,
+  getAllNodeConnectionPoints,
+  simplifyWaypoints,
+  insertWaypointAtPosition,
+  calculateOptimalHandles,
+  generateOrthogonalPath,
+  constrainToOrthogonal,
+} from '../utils/edgeRouting';
 
 interface CanvasProps {
   project: Project;
@@ -77,6 +87,12 @@ const Canvas: React.FC<CanvasProps> = ({
   const [dragLinkStart, setDragLinkStart] = useState<Position | null>(null);
   const [dragLinkEnd, setDragLinkEnd] = useState<Position | null>(null);
   const [dragLinkTargetId, setDragLinkTargetId] = useState<string | null>(null);
+  
+  // Waypoint and anchor dragging state
+  const [draggingMidpoint, setDraggingMidpoint] = useState<string | null>(null); // edgeId being dragged
+  const [midpointDragStart, setMidpointDragStart] = useState<Position | null>(null);
+  const [draggingAnchor, setDraggingAnchor] = useState<{ edgeId: string; type: 'source' | 'target' } | null>(null);
+  const [anchorDragStart, setAnchorDragStart] = useState<Position | null>(null);
 
   const { viewSettings } = project;
   const { zoom, pan, snapToGrid, gridSize, showGrid } = viewSettings;
@@ -232,6 +248,160 @@ const Canvas: React.FC<CanvasProps> = ({
     isDraggingLinkRef.current = true;
     dragLinkSourceIdRef.current = nodeId;
   }, [project.nodes, pan, zoom]);
+
+  // Handle waypoint drag start
+  const handleMidpointDragStart = useCallback((edgeId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    
+    const canvasRect = canvasRef.current?.getBoundingClientRect();
+    if (!canvasRect) return;
+
+    const startX = (e.clientX - canvasRect.left - pan.x) / zoom;
+    const startY = (e.clientY - canvasRect.top - pan.y) / zoom;
+
+    setDraggingMidpoint(edgeId);
+    setMidpointDragStart({ x: startX, y: startY });
+  }, [pan, zoom]);
+
+  // Handle anchor drag start
+  const handleAnchorDragStart = useCallback((edgeId: string, anchorType: 'source' | 'target', e: React.MouseEvent) => {
+    e.stopPropagation();
+    
+    const canvasRect = canvasRef.current?.getBoundingClientRect();
+    if (!canvasRect) return;
+
+    const startX = (e.clientX - canvasRect.left - pan.x) / zoom;
+    const startY = (e.clientY - canvasRect.top - pan.y) / zoom;
+
+    setDraggingAnchor({ edgeId, type: anchorType });
+    setAnchorDragStart({ x: startX, y: startY });
+  }, [pan, zoom]);
+
+  // Global mouse handlers for midpoint and anchor dragging
+  React.useEffect(() => {
+    const handleGlobalMouseMove = (e: MouseEvent) => {
+      const canvasRect = canvasRef.current?.getBoundingClientRect();
+      if (!canvasRect) return;
+
+      const mouseX = (e.clientX - canvasRect.left - panRef.current.x) / zoomRef.current;
+      const mouseY = (e.clientY - canvasRect.top - panRef.current.y) / zoomRef.current;
+
+      // Handle midpoint dragging (creates or updates single waypoint)
+      if (draggingMidpoint) {
+        const edge = projectRef.current.edges.find(e => e.id === draggingMidpoint);
+        if (!edge) return;
+
+        const sourceNode = getNodeById(projectRef.current.nodes, edge.source);
+        const targetNode = getNodeById(projectRef.current.nodes, edge.target);
+        if (!sourceNode || !targetNode) return;
+
+        // Calculate handles and connection points
+        const handles = edge.sourceHandle && edge.targetHandle
+          ? { sourceHandle: edge.sourceHandle, targetHandle: edge.targetHandle }
+          : calculateOptimalHandles(sourceNode, targetNode);
+
+        const sourcePoint = getNodeConnectionPoint(
+          sourceNode,
+          edge.sourceHandle || handles.sourceHandle,
+          sourceNode.width || 120,
+          sourceNode.height || 60
+        );
+        const targetPoint = getNodeConnectionPoint(
+          targetNode,
+          edge.targetHandle || handles.targetHandle,
+          targetNode.width || 120,
+          targetNode.height || 60
+        );
+
+        let newX = mouseX;
+        let newY = mouseY;
+
+        // Apply grid snapping if enabled
+        if (projectRef.current.viewSettings.snapToGrid) {
+          const gridSize = projectRef.current.viewSettings.gridSize;
+          newX = Math.round(newX / gridSize) * gridSize;
+          newY = Math.round(newY / gridSize) * gridSize;
+        }
+
+        // Apply orthogonal constraint
+        const constrainedPos = constrainToOrthogonal(
+          { x: newX, y: newY },
+          sourcePoint,
+          targetPoint
+        );
+
+        // Update edge with single waypoint
+        const updatedEdges = projectRef.current.edges.map(e =>
+          e.id === draggingMidpoint ? { ...e, waypoints: [constrainedPos] } : e
+        );
+
+        onProjectChangeRef.current({
+          ...projectRef.current,
+          edges: updatedEdges,
+          updatedAt: new Date(),
+        });
+      }
+
+      // Handle anchor dragging
+      if (draggingAnchor) {
+        const edge = projectRef.current.edges.find(e => e.id === draggingAnchor.edgeId);
+        if (!edge) return;
+
+        const nodeId = draggingAnchor.type === 'source' ? edge.source : edge.target;
+        const node = getNodeById(projectRef.current.nodes, nodeId);
+        if (!node) return;
+
+        // Get all anchor points for this node
+        const anchorPoints = getAllNodeConnectionPoints(
+          node,
+          node.width || 120,
+          node.height || 60
+        );
+
+        // Find closest handle to mouse position
+        const closestHandle = getClosestHandle({ x: mouseX, y: mouseY }, anchorPoints);
+
+        // Update edge with new handle
+        const updatedEdges = projectRef.current.edges.map(e => {
+          if (e.id === draggingAnchor.edgeId) {
+            if (draggingAnchor.type === 'source') {
+              return { ...e, sourceHandle: closestHandle };
+            } else {
+              return { ...e, targetHandle: closestHandle };
+            }
+          }
+          return e;
+        });
+
+        onProjectChangeRef.current({
+          ...projectRef.current,
+          edges: updatedEdges,
+          updatedAt: new Date(),
+        });
+      }
+    };
+
+    const handleGlobalMouseUp = () => {
+      if (draggingMidpoint) {
+        // No simplification needed for single waypoint
+        setDraggingMidpoint(null);
+        setMidpointDragStart(null);
+      }
+
+      if (draggingAnchor) {
+        setDraggingAnchor(null);
+        setAnchorDragStart(null);
+      }
+    };
+
+    document.addEventListener('mousemove', handleGlobalMouseMove);
+    document.addEventListener('mouseup', handleGlobalMouseUp);
+
+    return () => {
+      document.removeEventListener('mousemove', handleGlobalMouseMove);
+      document.removeEventListener('mouseup', handleGlobalMouseUp);
+    };
+  }, [draggingMidpoint, draggingAnchor]);
 
   // Handle canvas pan and zoom
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
@@ -545,6 +715,59 @@ const Canvas: React.FC<CanvasProps> = ({
     onEdgeSelect(edgeId, e.ctrlKey || e.metaKey);
   }, [onEdgeSelect]);
 
+  // Handle adding a bend to an edge at a specific position
+  // This will be called from the context menu "Add Bend" action
+  const handleAddBendToEdge = useCallback((edgeId: string, clickX: number, clickY: number) => {
+    const edge = project.edges.find(e => e.id === edgeId);
+    if (!edge) return;
+
+    const sourceNode = getNodeById(project.nodes, edge.source);
+    const targetNode = getNodeById(project.nodes, edge.target);
+    if (!sourceNode || !targetNode) return;
+
+    // Calculate handles and connection points
+    const handles = edge.sourceHandle && edge.targetHandle
+      ? { sourceHandle: edge.sourceHandle, targetHandle: edge.targetHandle }
+      : calculateOptimalHandles(sourceNode, targetNode);
+
+    const sourcePoint = getNodeConnectionPoint(
+      sourceNode,
+      edge.sourceHandle || handles.sourceHandle,
+      sourceNode.width || 120,
+      sourceNode.height || 60
+    );
+    const targetPoint = getNodeConnectionPoint(
+      targetNode,
+      edge.targetHandle || handles.targetHandle,
+      targetNode.width || 120,
+      targetNode.height || 60
+    );
+
+    // Build current path points
+    const pathPoints: Position[] = [sourcePoint];
+    if (edge.waypoints && edge.waypoints.length > 0) {
+      pathPoints.push(...edge.waypoints);
+    }
+    pathPoints.push(targetPoint);
+
+    // Insert waypoint at click position
+    const { waypoints: newWaypoints } = insertWaypointAtPosition(
+      { x: clickX, y: clickY },
+      pathPoints
+    );
+
+    // Update the edge with new waypoints
+    const updatedEdges = project.edges.map(e =>
+      e.id === edgeId ? { ...e, waypoints: newWaypoints } : e
+    );
+
+    onProjectChange({
+      ...project,
+      edges: updatedEdges,
+      updatedAt: new Date(),
+    });
+  }, [project, onProjectChange]);
+
   // Handle edge delete
   
 
@@ -662,6 +885,8 @@ const Canvas: React.FC<CanvasProps> = ({
                   onEdgeSelect(edge.id);
                 }
               }}
+              onMidpointDragStart={(e: React.MouseEvent) => handleMidpointDragStart(edge.id, e)}
+              onAnchorDragStart={(anchorType: 'source' | 'target', e: React.MouseEvent) => handleAnchorDragStart(edge.id, anchorType, e)}
             />
           ))}
           

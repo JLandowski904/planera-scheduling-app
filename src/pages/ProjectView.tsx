@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useNavigate } from '../lib/simpleRouter';
-import { ArrowLeft, Share2, Printer, Users } from 'lucide-react';
+import { ArrowLeft, Share2, Printer, Users, UserPlus } from 'lucide-react';
 import Canvas from '../components/Canvas';
 import TimelineView from '../components/TimelineView';
 import TableView from '../components/TableView';
@@ -60,6 +60,7 @@ const normalizeProjectResponse = (data: ProjectData): Project => {
   const merged: Project = {
     ...base,
     ...(storedProject ?? {}),
+    assignees: storedProject?.assignees ?? [], // Initialize project assignees
     viewSettings: {
       ...base.viewSettings,
       ...(storedProject?.viewSettings ?? {}),
@@ -70,15 +71,39 @@ const normalizeProjectResponse = (data: ProjectData): Project => {
     },
   };
 
-  const normalizedNodes = merged.nodes.map(node => ({
-    ...node,
-    position: { ...node.position },
-    data: {
-      ...node.data,
-      startDate: coerceOptionalDate(node.data.startDate),
-      dueDate: coerceOptionalDate(node.data.dueDate),
-    },
-  }));
+  // Migrate legacy discipline data to assignees
+  const normalizedNodes = merged.nodes.map(node => {
+    const nodeData = { ...node.data };
+    
+    // If node has discipline but no assignees, migrate discipline to assignees
+    if (nodeData.discipline && (!nodeData.assignees || nodeData.assignees.length === 0)) {
+      nodeData.assignees = [nodeData.discipline];
+    }
+    
+    // Keep discipline for backward compatibility during transition, but assignees is canonical
+    
+    return {
+      ...node,
+      position: { ...node.position },
+      data: {
+        ...nodeData,
+        startDate: coerceOptionalDate(nodeData.startDate),
+        dueDate: coerceOptionalDate(nodeData.dueDate),
+      },
+    };
+  });
+
+  // Collect all unique assignees from nodes to build project assignee list
+  const allAssignees = new Set<string>(merged.assignees || []);
+  normalizedNodes.forEach(node => {
+    if (node.data.assignees) {
+      node.data.assignees.forEach(assignee => allAssignees.add(assignee));
+    }
+    // Also collect from legacy discipline if present
+    if (node.data.discipline) {
+      allAssignees.add(node.data.discipline);
+    }
+  });
 
   const normalizedPhases = merged.phases.map(phase => ({
     ...phase,
@@ -88,12 +113,16 @@ const normalizeProjectResponse = (data: ProjectData): Project => {
 
   const normalizedEdges = merged.edges.map(edge => ({ ...edge }));
 
+  // Migrate legacy disciplines filter to assignees
+  const legacyDisciplines = merged.filters.disciplines || [];
+  const migratedAssignees = [...new Set([...merged.filters.assignees, ...legacyDisciplines])];
+
   const normalizedFilters = {
     ...merged.filters,
+    assignees: migratedAssignees,
     types: [...merged.filters.types],
     statuses: [...merged.filters.statuses],
-    assignees: [...merged.filters.assignees],
-    disciplines: [...merged.filters.disciplines],
+    disciplines: [...merged.filters.disciplines], // Keep for backward compat but not actively used
     tags: [...merged.filters.tags],
     phases: [...merged.filters.phases],
     customPresets: merged.filters.customPresets.map(preset => ({
@@ -125,6 +154,7 @@ const normalizeProjectResponse = (data: ProjectData): Project => {
     nodes: normalizedNodes,
     phases: normalizedPhases,
     edges: normalizedEdges,
+    assignees: Array.from(allAssignees),
     filters: normalizedFilters,
     viewSettings: {
       ...merged.viewSettings,
@@ -156,6 +186,8 @@ const ProjectView: React.FC = () => {
   const [projectAccess, setProjectAccess] = useState<ProjectAccess | null>(null);
   const [collaborationOpen, setCollaborationOpen] = useState(false);
   const [collaborationInitialTab, setCollaborationInitialTab] = useState<'activity' | 'comments' | 'members'>('activity');
+  const [assigneesDialogOpen, setAssigneesDialogOpen] = useState(false);
+  const [newAssigneeName, setNewAssigneeName] = useState('');
   const [nodeDialogState, setNodeDialogState] = useState<{
     isOpen: boolean;
     mode: 'create' | 'edit';
@@ -511,6 +543,78 @@ const ProjectView: React.FC = () => {
     cleanup();
   }, [project]);
 
+  const handleAddAssignee = useCallback(() => {
+    if (!project || !newAssigneeName.trim()) {
+      return;
+    }
+
+    const trimmedName = newAssigneeName.trim();
+    if (project.assignees.includes(trimmedName)) {
+      alert('This assignee already exists');
+      return;
+    }
+
+    const updatedProject: Project = {
+      ...project,
+      assignees: [...project.assignees, trimmedName],
+      updatedAt: new Date(),
+    };
+
+    handleProjectChange(updatedProject);
+    setNewAssigneeName('');
+  }, [project, newAssigneeName, handleProjectChange]);
+
+  const handleRemoveAssignee = useCallback((assigneeName: string) => {
+    if (!project) {
+      return;
+    }
+
+    // Check if assignee is used on any nodes
+    const nodesUsingAssignee = project.nodes.filter(node =>
+      node.data.assignees?.includes(assigneeName)
+    );
+
+    if (nodesUsingAssignee.length > 0) {
+      const confirmed = window.confirm(
+        `This assignee is assigned to ${nodesUsingAssignee.length} task(s). Removing will unassign them from all tasks. Continue?`
+      );
+      if (!confirmed) {
+        return;
+      }
+
+      // Remove assignee from all nodes
+      const updatedNodes = project.nodes.map(node => {
+        if (node.data.assignees?.includes(assigneeName)) {
+          return {
+            ...node,
+            data: {
+              ...node.data,
+              assignees: node.data.assignees.filter(a => a !== assigneeName),
+            },
+          };
+        }
+        return node;
+      });
+
+      const updatedProject: Project = {
+        ...project,
+        nodes: updatedNodes,
+        assignees: project.assignees.filter(a => a !== assigneeName),
+        updatedAt: new Date(),
+      };
+
+      handleProjectChange(updatedProject);
+    } else {
+      const updatedProject: Project = {
+        ...project,
+        assignees: project.assignees.filter(a => a !== assigneeName),
+        updatedAt: new Date(),
+      };
+
+      handleProjectChange(updatedProject);
+    }
+  }, [project, handleProjectChange]);
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-screen bg-gray-50">
@@ -564,6 +668,14 @@ const ProjectView: React.FC = () => {
           </div>
           <div className="flex items-center gap-3">
             {/* Duplicate/Delete moved to Projects page */}
+            <button
+              onClick={() => setAssigneesDialogOpen(true)}
+              className="flex items-center gap-2 px-4 py-2 border border-gray-300 dark:border-slate-600 rounded-lg hover:bg-gray-50 dark:hover:bg-slate-700 transition font-medium text-gray-700 dark:text-slate-200 no-print"
+              title="Manage project assignees"
+            >
+              <UserPlus className="w-4 h-4" />
+              Assignees
+            </button>
             <button
               onClick={() => {
                 setCollaborationInitialTab('activity');
@@ -735,6 +847,100 @@ const ProjectView: React.FC = () => {
         currentUserId={currentUserId}
         initialTab={collaborationInitialTab}
       />
+    )}
+
+    {/* Assignees Management Dialog */}
+    {assigneesDialogOpen && project && (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm px-4">
+        <div className="bg-white dark:bg-slate-800 rounded-xl shadow-xl w-full max-w-md max-h-[80vh] overflow-y-auto">
+          <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 dark:border-slate-700">
+            <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Manage Assignees</h2>
+            <button
+              type="button"
+              onClick={() => {
+                setAssigneesDialogOpen(false);
+                setNewAssigneeName('');
+              }}
+              className="p-2 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition"
+              aria-label="Close dialog"
+            >
+              ×
+            </button>
+          </div>
+
+          <div className="px-6 py-5 space-y-4">
+            {/* Add new assignee */}
+            <div>
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                Add New Assignee
+              </label>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={newAssigneeName}
+                  onChange={(e) => setNewAssigneeName(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      handleAddAssignee();
+                    }
+                  }}
+                  placeholder="e.g., Architect, PM, Alex Smith"
+                  className="flex-1 px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-slate-700 text-gray-900 dark:text-slate-100"
+                />
+                <button
+                  onClick={handleAddAssignee}
+                  disabled={!newAssigneeName.trim()}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Add
+                </button>
+              </div>
+            </div>
+
+            {/* List of assignees */}
+            <div>
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                Project Assignees ({project.assignees.length})
+              </label>
+              {project.assignees.length === 0 ? (
+                <p className="text-sm text-slate-500 dark:text-slate-400 py-4 text-center border border-dashed border-slate-300 dark:border-slate-600 rounded-lg">
+                  No assignees yet. Add one above to get started.
+                </p>
+              ) : (
+                <div className="space-y-2">
+                  {project.assignees.map((assignee) => (
+                    <div
+                      key={assignee}
+                      className="flex items-center justify-between px-3 py-2 bg-slate-50 dark:bg-slate-700 rounded-lg border border-slate-200 dark:border-slate-600"
+                    >
+                      <span className="text-sm text-slate-900 dark:text-slate-100">{assignee}</span>
+                      <button
+                        onClick={() => handleRemoveAssignee(assignee)}
+                        className="text-sm text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 transition"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-slate-200 dark:border-slate-700">
+            <button
+              onClick={() => {
+                setAssigneesDialogOpen(false);
+                setNewAssigneeName('');
+              }}
+              className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition"
+            >
+              Done
+            </button>
+          </div>
+        </div>
+      </div>
     )}
 
       {showNodeDialog && project && (

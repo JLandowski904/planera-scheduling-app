@@ -33,7 +33,7 @@ export interface NodeData {
   tags: string[];
   
   // Task-specific fields
-  assignees?: string[]; // Person node IDs
+  assignees?: string[]; // Assignee names (project-scoped, not user IDs)
   startDate?: Date;
   dueDate?: Date;
   durationDays?: number;
@@ -47,8 +47,8 @@ export interface NodeData {
   avatar?: string;
   workload?: WorkloadData;
   
-  // Construction-specific fields
-  discipline?: string;
+  // Construction-specific fields (deprecated - use assignees instead)
+  discipline?: string; // Legacy field, migrated to assignees on load
   submittalNumber?: string;
   reviewDays?: number;
   
@@ -72,6 +72,10 @@ export interface Edge {
   selected?: boolean;
   isBlocked?: boolean;
   blockedBy?: string;
+  // Edge routing configuration
+  sourceHandle?: 'top' | 'right' | 'bottom' | 'left';
+  targetHandle?: 'top' | 'right' | 'bottom' | 'left';
+  waypoints?: Position[];
 }
 
 export interface Phase {
@@ -92,6 +96,7 @@ export interface Project {
   nodes: Node[];
   edges: Edge[];
   phases: Phase[];
+  assignees: string[]; // Project-scoped assignee names
   viewSettings: ViewSettings;
   filters: FilterSettings;
 }
@@ -109,7 +114,7 @@ export interface FilterSettings {
   types: NodeType[];
   statuses: TaskStatus[];
   assignees: string[];
-  disciplines: string[];
+  disciplines: string[]; // Legacy field, kept for backward compatibility but not actively used
   tags: string[];
   phases: string[];
   dateRange?: {

@@ -246,6 +246,7 @@ export const createProjectFromTemplate = (
     nodes,
     edges: [], // No edges in template - user will create dependencies
     phases: [],
+    assignees: [], // Initialize empty assignees list
     viewSettings: {
       currentView: 'whiteboard',
       zoom: 0.8,

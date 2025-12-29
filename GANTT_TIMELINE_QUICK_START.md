@@ -5,10 +5,10 @@
 Your Timeline view is now a **professional Gantt-style construction schedule** with:
 
 - ✅ **Phase headers** grouping related tasks
-- ✅ **Discipline filtering** to focus on specific trades
+- ✅ **Assignee filtering** to focus on specific team members
 - ✅ **Multi-level zoom** (month/week/day views)
 - ✅ **Dependency arrows** showing task relationships
-- ✅ **Complete metadata** (discipline, start/end dates)
+- ✅ **Complete metadata** (assignee, start/end dates)
 - ✅ **Sorted by start date** within each phase
 
 ---
@@ -36,11 +36,11 @@ Located in the top-left toolbar:
 
 **Tip:** The active zoom level is highlighted in blue.
 
-### Filtering by Discipline
+### Filtering by Assignee
 
-1. Click **"Disciplines"** button (top-right toolbar)
-2. **Check** disciplines you want to see
-3. **Uncheck** disciplines to hide
+1. Click **"Assignees"** button (top-right toolbar)
+2. **Check** assignees you want to see
+3. **Uncheck** assignees to hide
 4. Click **"Clear All"** to reset
 
 **Features:**
@@ -52,7 +52,7 @@ Located in the top-left toolbar:
 
 ```
 ┌─────────────────────────────────────────────────────┐
-│ [Name Column] [Discipline] [Start] [End] | Timeline │
+│ [Name Column] [Assignee] [Start] [End] | Timeline   │
 ├─────────────────────────────────────────────────────┤
 │ Phase 1 (Blue Header)                    | [====]   │
 │   Task A    | Arch    | Jan 1  | Jan 5  | [██]     │
@@ -83,9 +83,9 @@ Located in the top-left toolbar:
 - **Green** = Deliverable
 - **Purple** = Milestone
 
-**Discipline Colors:**
-- Each discipline gets a consistent color from a 16-color palette
-- Shown as colored badges in the Discipline column
+**Assignee Colors:**
+- Each assignee gets a consistent color from a 16-color palette
+- Shown as colored badges in the Assignee column
 
 ---
 
@@ -116,9 +116,9 @@ Located in the top-left toolbar:
 ## 🔍 Common Scenarios
 
 ### "I want to see only structural tasks"
-1. Click **Disciplines** button
+1. Click **Assignees** button
 2. Check only **"Structural"**
-3. All other disciplines are hidden
+3. All other assignees are hidden
 
 ### "I want a high-level overview"
 1. Click the **Month** zoom button (left)
@@ -130,8 +130,8 @@ Located in the top-left toolbar:
 2. Each column is one day
 3. Month grouping headers show at the top
 
-### "I want to see all disciplines again"
-1. Click **Disciplines** button
+### "I want to see all assignees again"
+1. Click **Assignees** button
 2. Click **"Clear All"**
 3. All items are now visible
 
@@ -149,7 +149,7 @@ For the Timeline to work best, ensure your tasks have:
 - ✅ **Start Date** - When the task begins
 - ✅ **End Date** (Due Date) - When the task completes
 - ✅ **Phase Assignment** - Which phase the task belongs to
-- ✅ **Discipline** (optional) - For filtering and color coding
+- ✅ **Assignee** (optional) - For filtering and color coding
 - ✅ **Dependencies** (optional) - For arrow visualization
 
 **Note:** Tasks without dates won't appear in the Timeline view.
@@ -166,8 +166,8 @@ For the Timeline to work best, ensure your tasks have:
   3. Change its color
   4. Return to Timeline - color updates automatically
 
-### Discipline Colors
-- Automatically assigned based on discipline name
+### Assignee Colors
+- Automatically assigned based on assignee name
 - Consistent across all views
 - 16-color palette ensures good contrast
 
@@ -188,7 +188,7 @@ For the Timeline to work best, ensure your tasks have:
 
 ### "I don't see any tasks"
 - Check that tasks have start and end dates
-- Check if discipline filter is active (clear it)
+- Check if assignee filter is active (clear it)
 - Verify tasks are assigned to phases
 
 ### "Dependency arrows are missing"
@@ -222,10 +222,10 @@ Now that you have a professional Gantt timeline:
 
 1. **Create phases** for your project stages
 2. **Add tasks** with start and end dates
-3. **Assign disciplines** to tasks
+3. **Assign team members** to tasks
 4. **Create dependencies** between tasks
 5. **Use zoom** to see different time scales
-6. **Filter by discipline** to focus on specific trades
+6. **Filter by assignee** to focus on specific team members
 
 **Enjoy your new construction scheduling tool!** 🎉
 

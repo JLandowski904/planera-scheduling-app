@@ -38,7 +38,7 @@ interface TaskFormState {
   status: TaskStatus;
   progress: number;
   priority: Priority;
-  discipline: string;
+  assignees: string[]; // Changed from discipline: string to assignees: string[]
   notes: string;
 }
 
@@ -106,7 +106,7 @@ const buildDefaultTaskState = (
       status: node.data.status ?? 'not_started',
       progress: clampNumber(node.data.percentComplete ?? 0, 0, 100),
       priority: node.data.priority ?? 'med',
-      discipline: node.data.discipline ?? '',
+      assignees: node.data.assignees ?? [], // Changed from discipline
       notes: node.data.notes ?? '',
     };
   }
@@ -127,7 +127,7 @@ const buildDefaultTaskState = (
     status: nodeType === 'milestone' ? 'not_started' : 'not_started',
     progress: 0,
     priority: 'med',
-    discipline: '',
+    assignees: [], // Changed from discipline: ''
     notes: '',
   };
 };
@@ -256,6 +256,7 @@ const NodeDialog: React.FC<NodeDialogProps> = ({
 }) => {
   // Local editable node type for edit mode (enables toggling among task/deliverable/milestone)
   const [selectedType, setSelectedType] = useState<NodeType>(nodeType);
+  const [showAssigneesDropdown, setShowAssigneesDropdown] = useState(false);
   const [taskState, setTaskState] = useState<TaskFormState>(() =>
     buildDefaultTaskState(
       project,
@@ -549,7 +550,7 @@ const NodeDialog: React.FC<NodeDialogProps> = ({
       status: taskState.status,
       percentComplete: clampNumber(taskState.progress, 0, 100),
       priority: taskState.priority,
-      discipline: taskState.discipline || undefined,
+      assignees: taskState.assignees.length > 0 ? taskState.assignees : undefined, // Changed from discipline
       notes: taskState.notes || undefined,
       tags: node?.data.tags ?? [],
     };
@@ -755,15 +756,90 @@ const NodeDialog: React.FC<NodeDialogProps> = ({
           </select>
         </div>
 
-        <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1">Discipline</label>
-          <input
-            type="text"
-            value={taskState.discipline}
-            onChange={(e) => setTaskState(prev => ({ ...prev, discipline: e.target.value }))}
-            className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-            placeholder="e.g. Civil"
-          />
+        <div className="relative">
+          <label className="block text-sm font-medium text-slate-700 mb-1">Assignees</label>
+          <button
+            type="button"
+            onClick={() => setShowAssigneesDropdown(!showAssigneesDropdown)}
+            className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-left bg-white flex items-center justify-between"
+          >
+            <span className="text-sm text-gray-700">
+              {taskState.assignees.length === 0 
+                ? 'Select assignees...' 
+                : `${taskState.assignees.length} selected`}
+            </span>
+            <span className="text-gray-400">▼</span>
+          </button>
+
+          {showAssigneesDropdown && (
+            <>
+              <div 
+                className="fixed inset-0 z-10" 
+                onClick={() => setShowAssigneesDropdown(false)}
+              />
+              <div className="absolute z-20 mt-1 w-full bg-white border border-gray-300 rounded-lg shadow-lg max-h-64 overflow-y-auto">
+                <div className="p-2">
+                  {project.assignees.length === 0 ? (
+                    <div className="text-sm text-gray-500 p-2 text-center">
+                      No assignees defined. Add them in project settings.
+                    </div>
+                  ) : (
+                    project.assignees.map(assignee => (
+                      <label 
+                        key={assignee} 
+                        className="flex items-center gap-2 p-2 hover:bg-gray-50 rounded cursor-pointer"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={taskState.assignees.includes(assignee)}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setTaskState(prev => ({
+                                ...prev,
+                                assignees: [...prev.assignees, assignee]
+                              }));
+                            } else {
+                              setTaskState(prev => ({
+                                ...prev,
+                                assignees: prev.assignees.filter(a => a !== assignee)
+                              }));
+                            }
+                          }}
+                          className="rounded border-gray-300"
+                        />
+                        <span className="text-sm text-gray-900">{assignee}</span>
+                      </label>
+                    ))
+                  )}
+                </div>
+              </div>
+            </>
+          )}
+          
+          {taskState.assignees.length > 0 && (
+            <div className="mt-2 flex flex-wrap gap-1">
+              {taskState.assignees.map(assignee => (
+                <span 
+                  key={assignee}
+                  className="inline-flex items-center gap-1 px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded"
+                >
+                  {assignee}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTaskState(prev => ({
+                        ...prev,
+                        assignees: prev.assignees.filter(a => a !== assignee)
+                      }));
+                    }}
+                    className="hover:text-blue-900"
+                  >
+                    ×
+                  </button>
+                </span>
+              ))}
+            </div>
+          )}
         </div>
       </div>
 

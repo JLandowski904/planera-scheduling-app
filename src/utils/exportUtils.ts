@@ -199,6 +199,7 @@ export const importFromJSON = (jsonString: string): Project => {
       nodes,
       edges: data.edges,
       phases: data.phases || [],
+      assignees: data.project.assignees || [], // Import assignees or default to empty
       viewSettings: data.viewSettings || {
         currentView: 'whiteboard',
         zoom: 1,
@@ -322,6 +323,7 @@ export const importFromCSV = (csvString: string): Project => {
       nodes,
       edges,
       phases: [],
+      assignees: [], // Initialize empty assignees list for CSV import
       viewSettings: {
         currentView: 'whiteboard',
         zoom: 1,

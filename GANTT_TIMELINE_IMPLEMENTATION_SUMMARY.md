@@ -20,11 +20,11 @@ The Timeline view has been completely redesigned into a professional Gantt-style
 - **Sorted by start date** within each phase (ascending order)
 - **Metadata columns** showing:
   - Task/Deliverable/Milestone name with icon
-  - Discipline (color-coded badge)
+  - Assignee (color-coded badge)
   - Start Date (formatted)
   - End Date (formatted)
 
-### 3. **Discipline Filtering** ✅
+### 3. **Assignee Filtering** ✅
 - **Per-view filter** that doesn't affect other views
 - **Multi-select dropdown** with checkboxes
 - **Filter badge** showing count of active filters
@@ -54,7 +54,7 @@ The Timeline view has been completely redesigned into a professional Gantt-style
 - **Node types** distinguished by:
   - **Color**: Different colors for tasks, deliverables, milestones
   - **Icons**: Calendar, CheckCircle, Clock icons
-- **Discipline colors**: Consistent color mapping per discipline
+- **Assignee colors**: Consistent color mapping per assignee
 - **Phase colors**: User-defined phase colors from whiteboard view
 - **Selection highlighting**: Blue ring around selected items
 
@@ -81,9 +81,9 @@ The Timeline view has been completely redesigned into a professional Gantt-style
 ### Layout Structure
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│ Toolbar: [Zoom Controls] [Discipline Filter]                │
+│ Toolbar: [Zoom Controls] [Assignee Filter]                  │
 ├─────────────────────────────────────────────────────────────┤
-│ Header: [Name] [Discipline] [Start] [End] | [Time Columns] │
+│ Header: [Name] [Assignee] [Start] [End] | [Time Columns]    │
 ├─────────────────────────────────────────────────────────────┤
 │ Phase 1 (colored header)                  | [Phase Bar]     │
 │   ├─ Task 1    | Arch  | Jan 1 | Jan 5   | [████]          │
@@ -105,7 +105,7 @@ The Timeline view has been completely redesigned into a professional Gantt-style
 - **Milestones**: Purple bars
 - **Phase headers**: User-defined phase colors
 - **Phase background**: Semi-transparent phase color (30% opacity)
-- **Disciplines**: Auto-generated consistent colors from 16-color palette
+- **Assignees**: Auto-generated consistent colors from 16-color palette
 
 ### Responsive Design
 - **Fixed left columns** for metadata (scrolls vertically only)
@@ -120,7 +120,7 @@ The Timeline view has been completely redesigned into a professional Gantt-style
 ## 🔧 Technical Implementation Details
 
 ### Data Flow
-1. **Filter nodes** by discipline and exclude person nodes
+1. **Filter nodes** by assignee and exclude person nodes
 2. **Group by phase** using `phase.nodeIds`
 3. **Sort within groups** by start date
 4. **Calculate positions** using date-to-pixel conversion
@@ -162,7 +162,7 @@ The Timeline view has been completely redesigned into a professional Gantt-style
 - [x] Items sorted by start date within phases
 - [x] Metadata columns display correctly
 - [x] Zoom controls switch between month/week/day
-- [x] Discipline filter shows/hides items
+- [x] Assignee filter shows/hides items
 - [x] Dependency arrows render between bars
 - [x] Selection highlighting works
 - [x] No linter errors
@@ -171,10 +171,10 @@ The Timeline view has been completely redesigned into a professional Gantt-style
 ### 📋 Manual Testing Recommendations
 Once you have a project with data:
 - [ ] Create multiple phases with different colors
-- [ ] Add tasks with different disciplines
+- [ ] Add tasks with different assignees
 - [ ] Create dependencies between tasks
 - [ ] Test zoom levels (month/week/day)
-- [ ] Test discipline filtering
+- [ ] Test assignee filtering
 - [ ] Verify date calculations are accurate
 - [ ] Check dependency arrow positioning
 - [ ] Test with large projects (50+ items)
@@ -190,19 +190,19 @@ Once you have a project with data:
 - Week-only view
 - Basic phase filter dropdown
 - Simple dependency lines
-- No discipline visibility
+- No assignee visibility
 - No date columns
 
 ### After (Gantt-Style)
 - **Hierarchical** phase → items structure
 - **Three zoom levels** (month/week/day)
-- **Multi-select discipline filter** with badges
+- **Multi-select assignee filter** with badges
 - **Professional elbow-style** dependency arrows
-- **Discipline column** with color coding
+- **Assignee column** with color coding
 - **Start/End date columns** for easy reference
 - **Phase date ranges** in headers
 - **Sorted by start date** within phases
-- **Color-coded bars** by type and discipline
+- **Color-coded bars** by type and assignee
 
 ---
 
@@ -220,9 +220,9 @@ Once you have a project with data:
 - Click the **middle button** (Maximize icon) for weekly view (default)
 - Click the **right button** (ZoomIn icon) for daily view
 
-**Filtering by Discipline:**
-1. Click the **"Disciplines"** button in the toolbar
-2. Check/uncheck disciplines to show/hide
+**Filtering by Assignee:**
+1. Click the **"Assignees"** button in the toolbar
+2. Check/uncheck assignees to show/hide
 3. Active filter count shows in a blue badge
 4. Click **"Clear All"** to reset
 
@@ -234,7 +234,7 @@ Once you have a project with data:
 
 **Reading the Timeline:**
 - **Phase headers** (colored rows) show phase name and date range
-- **Task rows** show name, discipline, start date, and end date
+- **Task rows** show name, assignee, start date, and end date
 - **Bars** show duration and timing on the timeline
 - **Icons** indicate type: Calendar (milestone), CheckCircle (deliverable), Clock (task)
 
@@ -286,11 +286,11 @@ The Timeline view has been transformed into a **professional, construction-indus
 
 ✅ **Phase-based hierarchy** with colored headers  
 ✅ **Multi-level zoom** (month/week/day)  
-✅ **Discipline filtering** with multi-select  
+✅ **Assignee filtering** with multi-select  
 ✅ **Dependency arrows** with elbow routing  
-✅ **Complete metadata** (discipline, dates)  
+✅ **Complete metadata** (assignee, dates)  
 ✅ **Sorted by start date** within phases  
-✅ **Color-coded visualization** by type and discipline  
+✅ **Color-coded visualization** by type and assignee  
 ✅ **Professional layout** with fixed columns and scrolling grid  
 ✅ **Performance optimized** with React best practices  
 

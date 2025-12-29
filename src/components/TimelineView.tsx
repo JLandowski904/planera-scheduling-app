@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import { Project, Node, Phase } from '../types';
 import { format } from 'date-fns';
 import { Calendar, Clock, CheckCircle, User, ZoomIn, ZoomOut, Maximize2, Filter } from 'lucide-react';
@@ -42,8 +42,9 @@ const TimelineView: React.FC<TimelineViewProps> = ({
 }) => {
   const { theme } = useTheme();
   const [scale, setScale] = useState<TimelineScale>('week');
-  const [disciplineFilter, setDisciplineFilter] = useState<string[]>([]);
-  const [showDisciplineDropdown, setShowDisciplineDropdown] = useState(false);
+  const [assigneeFilter, setAssigneeFilter] = useState<string[]>([]); // Changed from disciplineFilter
+  const [showAssigneeDropdown, setShowAssigneeDropdown] = useState(false); // Changed from showDisciplineDropdown
+  const timelineBodyRef = useRef<HTMLDivElement>(null);
 
   // Calculate visible date range
   const visibleDateRange = useMemo(() => {
@@ -55,28 +56,37 @@ const TimelineView: React.FC<TimelineViewProps> = ({
     return getTimeBuckets(visibleDateRange.start, visibleDateRange.end, scale);
   }, [visibleDateRange, scale]);
 
-  // Get all unique disciplines
-  const allDisciplines = useMemo(() => {
-    const disciplines = new Set<string>();
+  // Get all unique assignees
+  const allAssignees = useMemo(() => {
+    const assignees = new Set<string>();
     project.nodes.forEach(node => {
-      if (node.data.discipline) {
-        disciplines.add(node.data.discipline);
+      if (node.data.assignees) {
+        node.data.assignees.forEach(assignee => assignees.add(assignee));
       }
     });
-    return Array.from(disciplines).sort();
+    return Array.from(assignees).sort();
   }, [project.nodes]);
 
-  // Group nodes by phase and filter by discipline
+  // Group nodes by phase and filter by assignee
   const phaseGroups = useMemo((): PhaseGroup[] => {
     const groups: PhaseGroup[] = [];
     const assignedNodeIds = new Set<string>();
 
-    // Filter nodes by discipline first
+    // Filter nodes by assignee first
     const filteredNodes = project.nodes.filter(node => {
       if (node.type === 'person') return false;
       if (!node.data.startDate && !node.data.dueDate) return false;
-      if (disciplineFilter.length > 0 && node.data.discipline && !disciplineFilter.includes(node.data.discipline)) {
-        return false;
+      if (assigneeFilter.length > 0) {
+        // Node must have at least one assignee that's in the filter
+        if (!node.data.assignees || node.data.assignees.length === 0) {
+          return false;
+        }
+        const hasMatchingAssignee = node.data.assignees.some(assignee => 
+          assigneeFilter.includes(assignee)
+        );
+        if (!hasMatchingAssignee) {
+          return false;
+        }
       }
       return true;
     });
@@ -120,7 +130,7 @@ const TimelineView: React.FC<TimelineViewProps> = ({
     }
 
     return groups;
-  }, [project.phases, project.nodes, disciplineFilter]);
+  }, [project.phases, project.nodes, assigneeFilter]); // Changed from disciplineFilter
 
   // Calculate row positions for dependency arrows
   const nodeRowPositions = useMemo(() => {
@@ -179,8 +189,8 @@ const TimelineView: React.FC<TimelineViewProps> = ({
     }
   };
 
-  const getDisciplineColor = (discipline?: string) => {
-    if (!discipline) return 'bg-gray-400';
+  const getAssigneeColor = (assignee?: string) => { // Changed from getDisciplineColor
+    if (!assignee) return 'bg-gray-400';
     
     const colors = [
       'bg-red-400',
@@ -201,20 +211,26 @@ const TimelineView: React.FC<TimelineViewProps> = ({
       'bg-pink-400',
     ];
     
-    const hash = discipline.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+    const hash = assignee.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
     return colors[hash % colors.length];
   };
 
-  const toggleDiscipline = (discipline: string) => {
-    setDisciplineFilter(prev => 
-      prev.includes(discipline)
-        ? prev.filter(d => d !== discipline)
-        : [...prev, discipline]
+  const toggleAssignee = (assignee: string) => { // Changed from toggleDiscipline
+    setAssigneeFilter(prev => 
+      prev.includes(assignee)
+        ? prev.filter(d => d !== assignee)
+        : [...prev, assignee]
     );
   };
 
   const rowHeight = 48;
   const phaseRowHeight = 56;
+  const hasGroupedDayHeader = scale === 'day' && timeBuckets.some(bucket => bucket.groupLabel);
+  const headerHeight = hasGroupedDayHeader ? 52 : 32; // height of left-side task header row (and row offset)
+  const leftColumnsWidth = 256 + 128 + 112 + 112; // widths (px) of the meta columns (w-64, w-32, w-28, w-28)
+  const bucketWidth = scale === 'day' ? 80 : scale === 'week' ? 120 : 160; // widen buckets for large screens
+  const viewportWidth = typeof window !== 'undefined' ? window.innerWidth : 1400;
+  const timelineWidth = Math.max(timeBuckets.length * bucketWidth, viewportWidth - leftColumnsWidth - 120);
 
   const totalRows = phaseGroups.reduce((acc, group) => acc + 1 + group.nodes.length, 0);
   const timelineContentHeight = Math.max(totalRows * rowHeight, 400);
@@ -226,19 +242,21 @@ const TimelineView: React.FC<TimelineViewProps> = ({
     
     if (!startDate || !endDate) return null;
 
-    const leftPercent = (getXPositionForDate(startDate, visibleDateRange.start, visibleDateRange.end, 100));
-    const widthPercent = (getWidthForDateRange(startDate, endDate, visibleDateRange.start, visibleDateRange.end, 100));
+    const leftPx = getXPositionForDate(startDate, visibleDateRange.start, visibleDateRange.end, timelineWidth);
+    const widthPx = getWidthForDateRange(startDate, endDate, visibleDateRange.start, visibleDateRange.end, timelineWidth);
 
     return {
-      leftPercent: Math.max(0, Math.min(100, leftPercent)),
-      widthPercent: Math.max(1, Math.min(100 - leftPercent, widthPercent)),
+      left: Math.max(0, Math.min(timelineWidth, leftPx)),
+      width: Math.max(1, Math.min(timelineWidth - leftPx, widthPx)),
       startDate,
       endDate,
     };
   };
 
+  // No extra scroll sync needed when header lives inside the scrollable rail
+
   return (
-    <div className="timeline-view h-full min-h-0 flex flex-col bg-slate-50 dark:bg-slate-900">
+    <div className="timeline-view h-full min-h-0 flex flex-col bg-slate-50 dark:bg-slate-900 overflow-hidden">
       {/* Toolbar */}
       <div className="bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 p-4 no-print">
         <div className="flex items-center justify-between gap-4">
@@ -273,45 +291,45 @@ const TimelineView: React.FC<TimelineViewProps> = ({
             </span>
           </div>
 
-          {/* Discipline filter */}
+          {/* Assignee filter */}
           <div className="relative">
             <button
-              onClick={() => setShowDisciplineDropdown(!showDisciplineDropdown)}
+              onClick={() => setShowAssigneeDropdown(!showAssigneeDropdown)}
               className="flex items-center gap-2 px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md text-sm bg-white dark:bg-slate-700 text-gray-700 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-600 transition"
             >
               <Filter className="w-4 h-4" />
-              <span>Disciplines</span>
-              {disciplineFilter.length > 0 && (
+              <span>Assignees</span>
+              {assigneeFilter.length > 0 && (
                 <span className="ml-1 px-2 py-0.5 bg-blue-500 text-white text-xs rounded-full">
-                  {disciplineFilter.length}
+                  {assigneeFilter.length}
                 </span>
               )}
             </button>
 
-            {showDisciplineDropdown && (
+            {showAssigneeDropdown && (
               <div className="absolute right-0 mt-2 w-64 bg-white dark:bg-slate-800 border border-gray-300 dark:border-slate-600 rounded-md shadow-lg z-10">
                 <div className="p-2 border-b border-gray-200 dark:border-slate-700 flex justify-between">
-                  <span className="text-sm font-medium text-gray-900 dark:text-slate-100">Filter by Discipline</span>
+                  <span className="text-sm font-medium text-gray-900 dark:text-slate-100">Filter by Assignee</span>
                   <button
-                    onClick={() => setDisciplineFilter([])}
+                    onClick={() => setAssigneeFilter([])}
                     className="text-xs text-blue-600 hover:text-blue-700"
                   >
                     Clear All
                   </button>
                 </div>
                 <div className="max-h-64 overflow-y-auto p-2">
-                  {allDisciplines.length === 0 ? (
-                    <div className="text-sm text-gray-500 p-2">No disciplines found</div>
+                  {allAssignees.length === 0 ? (
+                    <div className="text-sm text-gray-500 p-2">No assignees found</div>
                   ) : (
-                    allDisciplines.map(discipline => (
-                      <label key={discipline} className="flex items-center gap-2 p-2 hover:bg-gray-50 dark:hover:bg-slate-700 rounded cursor-pointer">
+                    allAssignees.map(assignee => (
+                      <label key={assignee} className="flex items-center gap-2 p-2 hover:bg-gray-50 dark:hover:bg-slate-700 rounded cursor-pointer">
                         <input
                           type="checkbox"
-                          checked={disciplineFilter.includes(discipline)}
-                          onChange={() => toggleDiscipline(discipline)}
+                          checked={assigneeFilter.includes(assignee)}
+                          onChange={() => toggleAssignee(assignee)}
                           className="rounded border-gray-300"
                         />
-                        <span className="text-sm text-gray-900 dark:text-slate-200">{discipline}</span>
+                        <span className="text-sm text-gray-900 dark:text-slate-200">{assignee}</span>
                       </label>
                     ))
                   )}
@@ -322,77 +340,24 @@ const TimelineView: React.FC<TimelineViewProps> = ({
         </div>
       </div>
 
-      {/* Timeline header */}
-      <div className="timeline-header bg-white dark:bg-slate-800 border-b border-slate-300 dark:border-slate-600 sticky top-0 z-20">
-        <div className="flex">
-          {/* Left columns */}
-          <div className="flex border-r border-gray-300 dark:border-slate-600 bg-gray-50 dark:bg-slate-700">
-            <div className="w-64 p-3 border-r border-gray-200 dark:border-slate-600">
-              <h3 className="font-semibold text-gray-900 dark:text-slate-100 text-sm">Task / Deliverable / Milestone</h3>
-            </div>
-            <div className="w-32 p-3 border-r border-gray-200 dark:border-slate-600">
-              <h3 className="font-semibold text-gray-900 dark:text-slate-100 text-sm">Discipline</h3>
-            </div>
-            <div className="w-28 p-3 border-r border-gray-200 dark:border-slate-600">
-              <h3 className="font-semibold text-gray-900 dark:text-slate-100 text-sm">Start Date</h3>
-            </div>
-            <div className="w-28 p-3">
-              <h3 className="font-semibold text-gray-900 dark:text-slate-100 text-sm">End Date</h3>
-            </div>
-          </div>
-          
-          {/* Timeline columns */}
-          <div className="flex-1 flex overflow-x-auto">
-            {scale === 'day' && timeBuckets.some(b => b.groupLabel) && (
-              <div className="absolute top-0 left-0 right-0 h-6 flex border-b border-gray-200 bg-gray-100">
-                {timeBuckets.map((bucket, index) => {
-                  if (!bucket.groupLabel) return null;
-                  
-                  // Count consecutive days in this month
-                  let span = 1;
-                  for (let i = index + 1; i < timeBuckets.length; i++) {
-                    if (timeBuckets[i].groupLabel) break;
-                    span++;
-                  }
-                  
-                  return (
-                    <div
-                      key={`group-${index}`}
-                      className="text-xs font-medium text-gray-700 text-center border-r border-gray-300"
-                      style={{ 
-                        minWidth: `${(100 / timeBuckets.length) * span}%`,
-                        flex: `0 0 ${(100 / timeBuckets.length) * span}%`
-                      }}
-                    >
-                      {bucket.groupLabel}
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-            <div className={`flex w-full ${scale === 'day' && timeBuckets.some(b => b.groupLabel) ? 'mt-6' : ''}`}>
-              {timeBuckets.map((bucket, index) => (
-                <div
-                  key={index}
-                  className="flex-1 p-2 border-r border-gray-200 dark:border-slate-700 text-center bg-white dark:bg-slate-800"
-                  style={{ minWidth: scale === 'day' ? '60px' : '100px' }}
-                >
-                  <div className="text-xs font-medium text-gray-900 dark:text-slate-100">
-                    {bucket.label}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      </div>
-
       {/* Timeline content */}
-      <div className="flex-1 min-h-0 overflow-auto">
-        <div className="flex">
+      <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden">
+        <div className="flex w-full min-h-0">
           {/* Left columns */}
-          <div className="flex border-r border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800" style={{ minHeight: timelineContentHeight }}>
+          <div
+            className="flex shrink-0 border-r border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 sticky left-0 z-30"
+            style={{ minHeight: timelineContentHeight, height: '100%' }}
+          >
             <div className="w-64 border-r border-gray-200">
+              {/* Left header: Description */}
+              <div
+                className="px-4 border-b border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 flex items-center sticky top-0 z-40"
+                style={{ height: `${headerHeight}px` }}
+              >
+                <span className="text-xs font-medium text-gray-900 dark:text-slate-100">
+                  Description
+                </span>
+              </div>
               {phaseGroups.map((group, groupIndex) => (
                 <React.Fragment key={group.phase?.id || 'ungrouped'}>
                   {/* Phase header row */}
@@ -436,25 +401,46 @@ const TimelineView: React.FC<TimelineViewProps> = ({
               ))}
             </div>
 
-            {/* Discipline column */}
+            {/* Assignee column */}
             <div className="w-32 border-r border-gray-200">
+              {/* Left header: Assignee */}
+              <div
+                className="px-3 border-b border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 flex items-center sticky top-0 z-40"
+                style={{ height: `${headerHeight}px` }}
+              >
+                <span className="text-xs font-medium text-gray-900 dark:text-slate-100">
+                  Assignee
+                </span>
+              </div>
               {phaseGroups.map((group, groupIndex) => (
-                <React.Fragment key={`disc-${group.phase?.id || 'ungrouped'}`}>
+                <React.Fragment key={`assignee-${group.phase?.id || 'ungrouped'}`}>
                   <div
                     className="px-3 py-3 border-b border-gray-200"
                     style={{ height: `${phaseRowHeight}px` }}
                   />
                   {group.nodes.map(node => (
                     <div
-                      key={`disc-${node.id}`}
+                      key={`assignee-${node.id}`}
                       className="px-3 py-3 border-b border-gray-100 dark:border-slate-700"
                       style={{ height: `${rowHeight}px` }}
                     >
-                      {node.data.discipline && (
-                        <span className={`inline-block px-2 py-1 rounded text-xs text-white ${getDisciplineColor(node.data.discipline)}`}>
-                          {node.data.discipline}
-                        </span>
-                      )}
+                      {node.data.assignees && node.data.assignees.length > 0 ? (
+                        <div className="flex flex-wrap gap-1">
+                          {node.data.assignees.slice(0, 2).map((assignee, idx) => (
+                            <span 
+                              key={idx}
+                              className={`inline-block px-2 py-1 rounded text-xs text-white ${getAssigneeColor(assignee)}`}
+                            >
+                              {assignee}
+                            </span>
+                          ))}
+                          {node.data.assignees.length > 2 && (
+                            <span className="inline-block px-2 py-1 text-xs text-gray-600 dark:text-slate-400">
+                              +{node.data.assignees.length - 2}
+                            </span>
+                          )}
+                        </div>
+                      ) : null}
                     </div>
                   ))}
                 </React.Fragment>
@@ -463,6 +449,15 @@ const TimelineView: React.FC<TimelineViewProps> = ({
 
             {/* Start date column */}
             <div className="w-28 border-r border-gray-200">
+              {/* Left header: Start Date */}
+              <div
+                className="px-3 border-b border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 flex items-center sticky top-0 z-40"
+                style={{ height: `${headerHeight}px` }}
+              >
+                <span className="text-xs font-medium text-gray-900 dark:text-slate-100">
+                  Start Date
+                </span>
+              </div>
               {phaseGroups.map((group, groupIndex) => (
                 <React.Fragment key={`start-${group.phase?.id || 'ungrouped'}`}>
                   <div
@@ -486,6 +481,15 @@ const TimelineView: React.FC<TimelineViewProps> = ({
 
             {/* End date column */}
             <div className="w-28">
+              {/* Left header: Finish Date */}
+              <div
+                className="px-3 border-b border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 flex items-center sticky top-0 z-40"
+                style={{ height: `${headerHeight}px` }}
+              >
+                <span className="text-xs font-medium text-gray-900 dark:text-slate-100">
+                  Finish Date
+                </span>
+              </div>
               {phaseGroups.map((group, groupIndex) => (
                 <React.Fragment key={`end-${group.phase?.id || 'ungrouped'}`}>
                   <div
@@ -510,167 +514,220 @@ const TimelineView: React.FC<TimelineViewProps> = ({
 
           {/* Timeline grid and bars */}
           <div
-            className="flex-1 relative bg-white"
+            className="flex-1 min-w-0 relative bg-white overflow-x-auto"
             style={{ minHeight: timelineContentHeight }}
+            ref={timelineBodyRef}
           >
-            {/* Grid lines */}
-            <div className="absolute inset-0">
-              {timeBuckets.map((_, index) => (
-                <div
-                  key={`grid-${index}`}
-                  className="absolute top-0 bottom-0 border-r border-gray-200 dark:border-slate-700"
-                  style={{ left: `${(index / timeBuckets.length) * 100}%` }}
-                />
-              ))}
-            </div>
-
-            {/* Phase bars and node bars */}
-            {phaseGroups.map((group, groupIndex) => {
-              let currentY = phaseGroups.slice(0, groupIndex).reduce((acc, g) => acc + phaseRowHeight + g.nodes.length * rowHeight, 0);
-
-              return (
-                <React.Fragment key={`bars-${group.phase?.id || 'ungrouped'}`}>
-                  {/* Phase bar */}
-                  {group.phase && group.startDate && group.endDate && (
+            <div
+              className="relative"
+              style={{ width: `${timelineWidth}px`, minHeight: timelineContentHeight }}
+            >
+              {/* Sticky timeline headers inside the scrollable rail */}
+              <div className="sticky top-0 z-20 bg-white dark:bg-slate-800">
+                {scale === 'day' && timeBuckets.some(b => b.groupLabel) && (
+                  <div className="flex border-b border-gray-200 dark:border-slate-700 bg-gray-100 dark:bg-slate-700">
+                    {timeBuckets.map((bucket, index) => {
+                      if (!bucket.groupLabel) return null;
+                      
+                      let span = 1;
+                      for (let i = index + 1; i < timeBuckets.length; i++) {
+                        if (timeBuckets[i].groupLabel) break;
+                        span++;
+                      }
+                      
+                      return (
+                        <div
+                          key={`group-${index}`}
+                          className="text-xs font-medium text-gray-700 dark:text-slate-200 text-center border-r border-gray-300 dark:border-slate-600"
+                          style={{ 
+                            minWidth: span * bucketWidth,
+                            flex: `0 0 ${span * bucketWidth}px`
+                          }}
+                        >
+                          {bucket.groupLabel}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+                <div className="flex w-full border-b border-gray-200 dark:border-slate-700">
+                  {timeBuckets.map((bucket, index) => (
                     <div
-                      className="absolute"
-                      style={{
-                        top: `${currentY + 8}px`,
-                        left: `${getXPositionForDate(group.startDate, visibleDateRange.start, visibleDateRange.end, 100)}%`,
-                        width: `${getWidthForDateRange(group.startDate, group.endDate, visibleDateRange.start, visibleDateRange.end, 100)}%`,
-                        height: `${phaseRowHeight - 16}px`,
-                      }}
+                      key={index}
+                      className="p-2 border-r border-gray-200 dark:border-slate-700 text-center bg-white dark:bg-slate-800"
+                      style={{ width: bucketWidth, flex: `0 0 ${bucketWidth}px` }}
                     >
-                      <div
-                        className="h-full rounded opacity-30"
-                        style={{ backgroundColor: group.phase.color }}
-                      />
+                      <div className="text-xs font-medium text-gray-900 dark:text-slate-100">
+                        {bucket.label}
+                      </div>
                     </div>
-                  )}
+                  ))}
+                </div>
+              </div>
 
-                  {/* Node bars */}
-                  {group.nodes.map((node, nodeIndex) => {
-                    const barPos = getBarPosition(node);
-                    if (!barPos) return null;
+              {/* Grid lines */}
+              <div className="absolute inset-0">
+                {timeBuckets.map((_, index) => (
+                  <div
+                    key={`grid-${index}`}
+                    className="absolute top-0 bottom-0 border-r border-gray-200 dark:border-slate-700"
+                    style={{ left: `${index * bucketWidth}px` }}
+                  />
+                ))}
+                <div
+                  className="absolute top-0 bottom-0 border-r border-gray-200 dark:border-slate-700"
+                  style={{ left: `${timeBuckets.length * bucketWidth}px` }}
+                />
+              </div>
 
-                    const nodeY = currentY + phaseRowHeight + nodeIndex * rowHeight;
+              {/* Phase bars and node bars */}
+              {phaseGroups.map((group, groupIndex) => {
+                let currentY = phaseGroups.slice(0, groupIndex).reduce((acc, g) => acc + phaseRowHeight + g.nodes.length * rowHeight, 0);
 
-                    return (
+                return (
+                  <React.Fragment key={`bars-${group.phase?.id || 'ungrouped'}`}>
+                    {/* Phase bar */}
+                    {group.phase && group.startDate && group.endDate && (
                       <div
-                        key={`bar-${node.id}`}
                         className="absolute"
                         style={{
-                          top: `${nodeY + 8}px`,
-                          left: `${barPos.leftPercent}%`,
-                          width: `${barPos.widthPercent}%`,
-                          height: `${rowHeight - 16}px`,
+                          top: `${headerHeight + currentY + 8}px`,
+                          left: `${getXPositionForDate(group.startDate, visibleDateRange.start, visibleDateRange.end, timelineWidth)}px`,
+                          width: `${getWidthForDateRange(group.startDate, group.endDate, visibleDateRange.start, visibleDateRange.end, timelineWidth)}px`,
+                          height: `${phaseRowHeight - 16}px`,
                         }}
                       >
                         <div
-                          className={`h-full ${getNodeColor(node.type)} text-white px-2 rounded flex items-center gap-1 cursor-pointer hover:opacity-90 transition ${
-                            selectedNodes.includes(node.id) ? 'ring-2 ring-blue-600' : ''
-                          }`}
-                          onClick={() => onNodeSelect(node.id)}
-                          onContextMenu={(e) => onContextMenu(e, node.id, 'node')}
-                        >
-                          {getNodeIcon(node.type)}
-                          <span className="text-xs font-medium truncate flex-1">
-                            {node.title}
-                          </span>
-                          {node.data.percentComplete !== undefined && (
-                            <span className="text-xs">{node.data.percentComplete}%</span>
-                          )}
-                        </div>
+                          className="h-full rounded opacity-30"
+                          style={{ backgroundColor: group.phase.color }}
+                        />
                       </div>
-                    );
-                  })}
-                </React.Fragment>
-              );
-            })}
+                    )}
 
-            {/* Dependency arrows */}
-            <svg className="absolute inset-0 pointer-events-none" style={{ zIndex: 10 }}>
-              <defs>
-                {project.edges.map(edge => (
-                  <marker
-                    key={`marker-${edge.id}`}
-                    id={`arrow-${edge.id}`}
-                    markerWidth="8"
-                    markerHeight="8"
-                    refX="7"
-                    refY="4"
-                    orient="auto"
-                  >
-                    <path d="M0,0 L0,8 L8,4 z" fill={edge.isBlocked ? '#ef4444' : '#6b7280'} />
-                  </marker>
-                ))}
-              </defs>
-              {project.edges.map(edge => {
-                const sourceRow = nodeRowPositions.get(edge.source);
-                const targetRow = nodeRowPositions.get(edge.target);
-                
-                if (sourceRow === undefined || targetRow === undefined) return null;
+                    {/* Node bars */}
+                    {group.nodes.map((node, nodeIndex) => {
+                      const barPos = getBarPosition(node);
+                      if (!barPos) return null;
 
-                // Find source and target nodes
-                let sourceNode: Node | undefined;
-                let targetNode: Node | undefined;
-                phaseGroups.forEach(group => {
-                  group.nodes.forEach(node => {
-                    if (node.id === edge.source) sourceNode = node;
-                    if (node.id === edge.target) targetNode = node;
-                  });
-                });
+                      const nodeY = currentY + phaseRowHeight + nodeIndex * rowHeight;
 
-                if (!sourceNode || !targetNode) return null;
-
-                const sourceBar = getBarPosition(sourceNode);
-                const targetBar = getBarPosition(targetNode);
-
-                if (!sourceBar || !targetBar) return null;
-
-                const sourceX = sourceBar.leftPercent + sourceBar.widthPercent;
-                const targetX = targetBar.leftPercent;
-
-                // Calculate proper Y positions based on phase groups
-                let actualSourceY = 0;
-                let actualTargetY = 0;
-                let cumulativeY = 0;
-
-                phaseGroups.forEach(group => {
-                  cumulativeY += phaseRowHeight;
-                  group.nodes.forEach(node => {
-                    if (node.id === edge.source) {
-                      actualSourceY = cumulativeY + rowHeight / 2;
-                    }
-                    if (node.id === edge.target) {
-                      actualTargetY = cumulativeY + rowHeight / 2;
-                    }
-                    cumulativeY += rowHeight;
-                  });
-                });
-
-                // Create elbow path
-                const midX = (sourceX + targetX) / 2;
-                const path = `M ${sourceX}% ${actualSourceY} L ${midX}% ${actualSourceY} L ${midX}% ${actualTargetY} L ${targetX}% ${actualTargetY}`;
-
-                return (
-                  <path
-                    key={edge.id}
-                    d={path}
-                    stroke={edge.isBlocked ? '#ef4444' : '#6b7280'}
-                    strokeWidth="2"
-                    fill="none"
-                    markerEnd={`url(#arrow-${edge.id})`}
-                    className="pointer-events-auto cursor-pointer hover:stroke-blue-500"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onEdgeSelect(edge.id);
-                    }}
-                    onContextMenu={(e) => onContextMenu(e, edge.id, 'edge')}
-                  />
+                      return (
+                        <div
+                          key={`bar-${node.id}`}
+                          className="absolute"
+                          style={{
+                            top: `${headerHeight + nodeY + 8}px`,
+                            left: `${barPos.left}px`,
+                            width: `${barPos.width}px`,
+                            height: `${rowHeight - 16}px`,
+                          }}
+                        >
+                          <div
+                            className={`h-full ${getNodeColor(node.type)} text-white px-2 rounded flex items-center gap-1 cursor-pointer hover:opacity-90 transition ${
+                              selectedNodes.includes(node.id) ? 'ring-2 ring-blue-600' : ''
+                            }`}
+                            onClick={() => onNodeSelect(node.id)}
+                            onContextMenu={(e) => onContextMenu(e, node.id, 'node')}
+                          >
+                            {getNodeIcon(node.type)}
+                            <span className="text-xs font-medium truncate flex-1">
+                              {node.title}
+                            </span>
+                            {node.data.percentComplete !== undefined && (
+                              <span className="text-xs">{node.data.percentComplete}%</span>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </React.Fragment>
                 );
               })}
-            </svg>
+
+              {/* Dependency arrows */}
+              <svg className="absolute inset-0 pointer-events-none" style={{ zIndex: 10 }}>
+                <defs>
+                  {project.edges.map(edge => (
+                    <marker
+                      key={`marker-${edge.id}`}
+                      id={`arrow-${edge.id}`}
+                      markerWidth="8"
+                      markerHeight="8"
+                      refX="7"
+                      refY="4"
+                      orient="auto"
+                    >
+                      <path d="M0,0 L0,8 L8,4 z" fill={edge.isBlocked ? '#ef4444' : '#6b7280'} />
+                    </marker>
+                  ))}
+                </defs>
+                {project.edges.map(edge => {
+                  const sourceRow = nodeRowPositions.get(edge.source);
+                  const targetRow = nodeRowPositions.get(edge.target);
+                  
+                  if (sourceRow === undefined || targetRow === undefined) return null;
+
+                  // Find source and target nodes
+                  let sourceNode: Node | undefined;
+                  let targetNode: Node | undefined;
+                  phaseGroups.forEach(group => {
+                    group.nodes.forEach(node => {
+                      if (node.id === edge.source) sourceNode = node;
+                      if (node.id === edge.target) targetNode = node;
+                    });
+                  });
+
+                  if (!sourceNode || !targetNode) return null;
+
+                  const sourceBar = getBarPosition(sourceNode);
+                  const targetBar = getBarPosition(targetNode);
+
+                  if (!sourceBar || !targetBar) return null;
+
+                  const sourceX = sourceBar.left + sourceBar.width;
+                  const targetX = targetBar.left;
+
+                  // Calculate proper Y positions based on phase groups
+                  let actualSourceY = 0;
+                  let actualTargetY = 0;
+                  let cumulativeY = 0;
+
+                  phaseGroups.forEach(group => {
+                    cumulativeY += phaseRowHeight;
+                    group.nodes.forEach(node => {
+                      if (node.id === edge.source) {
+                        actualSourceY = headerHeight + cumulativeY + rowHeight / 2;
+                      }
+                      if (node.id === edge.target) {
+                        actualTargetY = headerHeight + cumulativeY + rowHeight / 2;
+                      }
+                      cumulativeY += rowHeight;
+                    });
+                  });
+
+                  // Create elbow path
+                  const midX = (sourceX + targetX) / 2;
+                  const path = `M ${sourceX} ${actualSourceY} L ${midX} ${actualSourceY} L ${midX} ${actualTargetY} L ${targetX} ${actualTargetY}`;
+
+                  return (
+                    <path
+                      key={edge.id}
+                      d={path}
+                      stroke={edge.isBlocked ? '#ef4444' : '#6b7280'}
+                      strokeWidth="2"
+                      fill="none"
+                      markerEnd={`url(#arrow-${edge.id})`}
+                      className="pointer-events-auto cursor-pointer hover:stroke-blue-500"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onEdgeSelect(edge.id);
+                      }}
+                      onContextMenu={(e) => onContextMenu(e, edge.id, 'edge')}
+                    />
+                  );
+                })}
+              </svg>
+            </div>
           </div>
         </div>
       </div>
@@ -687,11 +744,11 @@ const TimelineView: React.FC<TimelineViewProps> = ({
         </div>
       </div>
 
-      {/* Click outside to close discipline dropdown */}
-      {showDisciplineDropdown && (
+      {/* Click outside to close assignee dropdown */}
+      {showAssigneeDropdown && (
         <div
           className="fixed inset-0 z-0"
-          onClick={() => setShowDisciplineDropdown(false)}
+          onClick={() => setShowAssigneeDropdown(false)}
         />
       )}
     </div>

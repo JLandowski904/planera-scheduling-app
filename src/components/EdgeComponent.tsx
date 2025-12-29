@@ -1,6 +1,14 @@
-import React, { useState, useCallback } from 'react';
-import { Edge, Node } from '../types';
+import React, { useState, useCallback, useMemo } from 'react';
+import { Edge, Node, Position } from '../types';
 import { Edit, Trash2 } from 'lucide-react';
+import {
+  getNodeConnectionPoint,
+  calculateOptimalHandles,
+  generateOrthogonalPath,
+  getAllNodeConnectionPoints,
+  getPathMidpoint,
+  HandlePosition,
+} from '../utils/edgeRouting';
 
 interface EdgeComponentProps {
   edge: Edge;
@@ -11,6 +19,8 @@ interface EdgeComponentProps {
   onDelete: () => void;
   onContextMenu: (e: React.MouseEvent) => void;
   onEdit?: () => void;
+  onMidpointDragStart?: (e: React.MouseEvent) => void;
+  onAnchorDragStart?: (anchorType: 'source' | 'target', e: React.MouseEvent) => void;
 }
 
 const EdgeComponent: React.FC<EdgeComponentProps> = ({
@@ -22,6 +32,8 @@ const EdgeComponent: React.FC<EdgeComponentProps> = ({
   onDelete,
   onContextMenu,
   onEdit,
+  onMidpointDragStart,
+  onAnchorDragStart,
 }) => {
   const [isHovered, setIsHovered] = useState(false);
   const [isActionsHovered, setIsActionsHovered] = useState(false);
@@ -39,55 +51,92 @@ const EdgeComponent: React.FC<EdgeComponentProps> = ({
     onClick(e);
   }, [onClick]);
 
+  const handlePathClick = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    // Just select the edge - don't auto-add waypoints
+    onClick(e);
+  }, [onClick]);
+
   const handleContextMenu = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
     onContextMenu(e);
   }, [onContextMenu]);
 
+  // Calculate connection points and path - MUST be before early return
+  const { pathData, pathPoints, sourcePoint, targetPoint, sourceHandle, targetHandle } = useMemo(() => {
+    if (!sourceNode || !targetNode) {
+      // Return empty defaults if nodes are missing
+      return {
+        pathData: '',
+        pathPoints: [],
+        sourcePoint: { x: 0, y: 0 },
+        targetPoint: { x: 0, y: 0 },
+        sourceHandle: 'right' as HandlePosition,
+        targetHandle: 'left' as HandlePosition,
+      };
+    }
+
+    // Determine handles (use manual or auto-calculate)
+    const handles = edge.sourceHandle && edge.targetHandle
+      ? { sourceHandle: edge.sourceHandle, targetHandle: edge.targetHandle }
+      : calculateOptimalHandles(sourceNode, targetNode);
+
+    const srcHandle = edge.sourceHandle || handles.sourceHandle;
+    const tgtHandle = edge.targetHandle || handles.targetHandle;
+
+    // Get connection points on node edges
+    const srcPoint = getNodeConnectionPoint(
+      sourceNode,
+      srcHandle,
+      sourceNode.width || 120,
+      sourceNode.height || 60
+    );
+    const tgtPoint = getNodeConnectionPoint(
+      targetNode,
+      tgtHandle,
+      targetNode.width || 120,
+      targetNode.height || 60
+    );
+
+    // Generate orthogonal path
+    const path = generateOrthogonalPath(
+      srcPoint,
+      tgtPoint,
+      srcHandle,
+      tgtHandle,
+      edge.waypoints
+    );
+
+    // Build array of all points for waypoint rendering
+    const points: Position[] = [srcPoint];
+    if (edge.waypoints && edge.waypoints.length > 0) {
+      points.push(...edge.waypoints);
+    }
+    points.push(tgtPoint);
+
+    return {
+      pathData: path,
+      pathPoints: points,
+      sourcePoint: srcPoint,
+      targetPoint: tgtPoint,
+      sourceHandle: srcHandle,
+      targetHandle: tgtHandle,
+    };
+  }, [sourceNode, targetNode, edge.sourceHandle, edge.targetHandle, edge.waypoints]);
+
+  // Get anchor points for rendering handles - MUST be before early return
+  const sourceAnchorPoints = useMemo(
+    () => sourceNode ? getAllNodeConnectionPoints(sourceNode, sourceNode.width || 120, sourceNode.height || 60) : {},
+    [sourceNode]
+  );
+  const targetAnchorPoints = useMemo(
+    () => targetNode ? getAllNodeConnectionPoints(targetNode, targetNode.width || 120, targetNode.height || 60) : {},
+    [targetNode]
+  );
+
   if (!sourceNode || !targetNode) {
     return null;
   }
-
-  const getEdgePath = () => {
-    const sourceX = sourceNode.position.x + (sourceNode.width || 120) / 2;
-    const sourceY = sourceNode.position.y + (sourceNode.height || 60) / 2;
-    const targetX = targetNode.position.x + (targetNode.width || 120) / 2;
-    const targetY = targetNode.position.y + (targetNode.height || 60) / 2;
-
-    // Calculate control points for curved edge
-    const dx = targetX - sourceX;
-    const dy = targetY - sourceY;
-    const distance = Math.sqrt(dx * dx + dy * dy);
-    const controlOffset = Math.min(distance * 0.3, 100);
-
-    const cp1x = sourceX + controlOffset;
-    const cp1y = sourceY;
-    const cp2x = targetX - controlOffset;
-    const cp2y = targetY;
-
-    return `M ${sourceX} ${sourceY} C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${targetX} ${targetY}`;
-  };
-
-  const getArrowMarker = () => {
-    const sourceX = sourceNode.position.x + (sourceNode.width || 120) / 2;
-    const sourceY = sourceNode.position.y + (sourceNode.height || 60) / 2;
-    const targetX = targetNode.position.x + (targetNode.width || 120) / 2;
-    const targetY = targetNode.position.y + (targetNode.height || 60) / 2;
-
-    const dx = targetX - sourceX;
-    const dy = targetY - sourceY;
-    const angle = Math.atan2(dy, dx);
-
-    const arrowLength = 10;
-    const arrowAngle = Math.PI / 6;
-
-    const arrowX1 = targetX - arrowLength * Math.cos(angle - arrowAngle);
-    const arrowY1 = targetY - arrowLength * Math.sin(angle - arrowAngle);
-    const arrowX2 = targetX - arrowLength * Math.cos(angle + arrowAngle);
-    const arrowY2 = targetY - arrowLength * Math.sin(angle + arrowAngle);
-
-    return `M ${targetX} ${targetY} L ${arrowX1} ${arrowY1} M ${targetX} ${targetY} L ${arrowX2} ${arrowY2}`;
-  };
 
   const getEdgeClasses = () => {
     const baseClasses = 'stroke-2 fill-none pointer-events-stroke';
@@ -114,62 +163,180 @@ const EdgeComponent: React.FC<EdgeComponentProps> = ({
   };
 
   const getEdgeLabelPosition = () => {
-    const sourceX = sourceNode.position.x + (sourceNode.width || 120) / 2;
-    const sourceY = sourceNode.position.y + (sourceNode.height || 60) / 2;
-    const targetX = targetNode.position.x + (targetNode.width || 120) / 2;
-    const targetY = targetNode.position.y + (targetNode.height || 60) / 2;
+    // Place label at true midpoint of path using utility function
+    const midPoint = getPathMidpoint(pathPoints);
 
     return {
-      x: (sourceX + targetX) / 2,
-      y: (sourceY + targetY) / 2 - 10,
+      x: midPoint.x,
+      y: midPoint.y - 10,
     };
   };
 
+  // Calculate offset positions for red endpoint handles
+  // Offset them slightly away from nodes to avoid hitbox conflicts
+  const getEndpointHandlePositions = () => {
+    const offset = 12; // pixels away from node edge
+
+    // Source endpoint: offset along first segment
+    let sourceHandlePos = sourcePoint;
+    if (pathPoints.length >= 2) {
+      const p0 = pathPoints[0];
+      const p1 = pathPoints[1];
+      const dx = p1.x - p0.x;
+      const dy = p1.y - p0.y;
+      const length = Math.sqrt(dx * dx + dy * dy);
+      
+      if (length > offset) {
+        sourceHandlePos = {
+          x: p0.x + (dx / length) * offset,
+          y: p0.y + (dy / length) * offset,
+        };
+      }
+    }
+
+    // Target endpoint: offset along last segment (moving backward from target)
+    let targetHandlePos = targetPoint;
+    if (pathPoints.length >= 2) {
+      const pLast = pathPoints[pathPoints.length - 1];
+      const pSecondLast = pathPoints[pathPoints.length - 2];
+      const dx = pLast.x - pSecondLast.x;
+      const dy = pLast.y - pSecondLast.y;
+      const length = Math.sqrt(dx * dx + dy * dy);
+      
+      if (length > offset) {
+        targetHandlePos = {
+          x: pLast.x - (dx / length) * offset,
+          y: pLast.y - (dy / length) * offset,
+        };
+      }
+    }
+
+    return { sourceHandlePos, targetHandlePos };
+  };
+
+  const { sourceHandlePos, targetHandlePos } = getEndpointHandlePositions();
   const labelPos = getEdgeLabelPosition();
   const showActions = isHovered || isActionsHovered;
+  const markerId = `edge-arrow-${edge.id}`;
 
   return (
     <g onMouseEnter={handleMouseEnter} onMouseLeave={handleMouseLeave}>
+      {/* Arrow marker definition - solid triangle aligned to stroke color */}
+      <defs>
+        <marker
+          id={markerId}
+          markerWidth="14"
+          markerHeight="14"
+          refX="12"
+          refY="7"
+          orient="auto"
+          markerUnits="strokeWidth"
+        >
+          <path d="M0,1 L0,13 L13,7 z" fill="context-stroke" stroke="context-stroke" />
+        </marker>
+      </defs>
+
       {/* Edge path */}
       <path
-        d={getEdgePath()}
+        d={pathData}
         className={getEdgeClasses()}
         onClick={handleClick}
         onContextMenu={handleContextMenu}
         style={{
-          strokeWidth: isSelected ? 3 : 2,
+          strokeWidth: isSelected ? 4 : 2,
           pointerEvents: 'stroke',
         }}
+        markerEnd={`url(#${markerId})`}
       />
-      
-      {/* Arrow */}
-      <path
-        d={getArrowMarker()}
-        className={getEdgeClasses()}
-        onClick={handleClick}
-        onContextMenu={handleContextMenu}
-        style={{
-          strokeWidth: isSelected ? 3 : 2,
-          pointerEvents: 'stroke',
-        }}
-      />
+
+      {/* Invisible wider path for easier clicking/dragging when selected */}
+      {isSelected && onMidpointDragStart && (
+        <path
+          d={pathData}
+          className="stroke-transparent fill-none cursor-move"
+          strokeWidth={20}
+          style={{ pointerEvents: 'stroke' }}
+          onMouseDown={(e) => {
+            e.stopPropagation();
+            onMidpointDragStart(e);
+          }}
+        />
+      )}
+
+      {/* Source connection point handle (red circle offset from node) */}
+      {isSelected && onAnchorDragStart && (
+        <g key="source-connection-handle">
+          <circle
+            cx={sourceHandlePos.x}
+            cy={sourceHandlePos.y}
+            r={7}
+            className="fill-red-500 dark:fill-red-400 stroke-white dark:stroke-slate-900 stroke-2 cursor-move"
+            style={{ pointerEvents: 'all' }}
+            onMouseDown={(e) => {
+              e.stopPropagation();
+              onAnchorDragStart('source', e);
+            }}
+          />
+          {/* Larger invisible hover area */}
+          <circle
+            cx={sourceHandlePos.x}
+            cy={sourceHandlePos.y}
+            r={14}
+            className="fill-transparent"
+            style={{ pointerEvents: 'all', cursor: 'move' }}
+            onMouseDown={(e) => {
+              e.stopPropagation();
+              onAnchorDragStart('source', e);
+            }}
+          />
+        </g>
+      )}
+
+      {/* Target connection point handle (red circle offset from node) */}
+      {isSelected && onAnchorDragStart && (
+        <g key="target-connection-handle">
+          <circle
+            cx={targetHandlePos.x}
+            cy={targetHandlePos.y}
+            r={7}
+            className="fill-red-500 dark:fill-red-400 stroke-white dark:stroke-slate-900 stroke-2 cursor-move"
+            style={{ pointerEvents: 'all' }}
+            onMouseDown={(e) => {
+              e.stopPropagation();
+              onAnchorDragStart('target', e);
+            }}
+          />
+          {/* Larger invisible hover area */}
+          <circle
+            cx={targetHandlePos.x}
+            cy={targetHandlePos.y}
+            r={14}
+            className="fill-transparent"
+            style={{ pointerEvents: 'all', cursor: 'move' }}
+            onMouseDown={(e) => {
+              e.stopPropagation();
+              onAnchorDragStart('target', e);
+            }}
+          />
+        </g>
+      )}
 
       {/* Edge label */}
       {getEdgeLabel() && (
-        <g>
+        <g style={{ pointerEvents: 'none' }}>
           <rect
             x={labelPos.x - 15}
             y={labelPos.y - 8}
             width={30}
             height={16}
-            className="fill-white stroke-gray-300"
+            className="fill-white dark:fill-slate-800 stroke-gray-300 dark:stroke-slate-600"
             rx={3}
           />
           <text
             x={labelPos.x}
             y={labelPos.y + 3}
             textAnchor="middle"
-            className="text-xs fill-gray-700 pointer-events-none"
+            className="text-xs fill-gray-700 dark:fill-slate-300"
           >
             {getEdgeLabel()}
           </text>
@@ -183,7 +350,7 @@ const EdgeComponent: React.FC<EdgeComponentProps> = ({
             cx={labelPos.x}
             cy={labelPos.y + 20}
             r={8}
-            className="fill-red-500"
+            className="fill-red-500 dark:fill-red-600"
           />
           <text
             x={labelPos.x}
@@ -198,13 +365,13 @@ const EdgeComponent: React.FC<EdgeComponentProps> = ({
 
       {/* Hover overlay for easier clicking */}
       <path
-        d={getEdgePath()}
+        d={pathData}
         className="stroke-transparent fill-none"
         style={{ 
           strokeWidth: 20,
           pointerEvents: 'stroke',
         }}
-        onClick={handleClick}
+        onClick={handlePathClick}
         onContextMenu={handleContextMenu}
       />
 

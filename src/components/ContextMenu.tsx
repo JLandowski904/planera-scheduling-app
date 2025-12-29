@@ -188,14 +188,28 @@ const ContextMenu: React.FC<ContextMenuProps> = ({
           Start to Start (SS)
         </div>
         <div 
-          className={`context-menu-item ${edge?.type === 'finish_to_finish' ? 'bg-blue-50' : ''}`}
+          className={`context-menu-item ${edge?.type === 'finish_to_finish' ? 'bg-blue-50 dark:bg-blue-900' : ''}`}
           onClick={() => handleAction('edge-type-finish_to_finish')}
         >
           <MoreHorizontal className="w-4 h-4" />
           Finish to Finish (FF)
         </div>
         
-        <div className="border-t border-gray-200 my-1"></div>
+        {/* Routing options */}
+        {edge && (edge.waypoints || edge.sourceHandle || edge.targetHandle) && (
+          <>
+            <div className="border-t border-gray-200 dark:border-slate-700 my-1"></div>
+            <div className="px-4 py-2 text-xs font-medium text-gray-500 dark:text-slate-400 uppercase tracking-wider">
+              Routing
+            </div>
+            <div className="context-menu-item" onClick={() => handleAction('edge-reset-routing')}>
+              <Unlink className="w-4 h-4" />
+              Reset to Auto Route
+            </div>
+          </>
+        )}
+        
+        <div className="border-t border-gray-200 dark:border-slate-700 my-1"></div>
         <div className="context-menu-item danger" onClick={() => handleAction('delete-edge')}>
           <Trash2 className="w-4 h-4" />
           Break Dependency

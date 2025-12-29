@@ -19,7 +19,7 @@ interface TableViewProps {
   onNodeSelect: (nodeId: string, multiSelect?: boolean) => void;
 }
 
-type SortField = 'title' | 'type' | 'phase' | 'status' | 'priority' | 'startDate' | 'dueDate' | 'discipline' | 'assignees';
+type SortField = 'title' | 'type' | 'phase' | 'status' | 'priority' | 'startDate' | 'dueDate' | 'assignees';
 type SortDirection = 'asc' | 'desc';
 
 const TableView: React.FC<TableViewProps> = ({
@@ -64,7 +64,7 @@ const TableView: React.FC<TableViewProps> = ({
     if (searchTerm) {
       filtered = filtered.filter(node =>
         node.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        node.data.discipline?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        node.data.assignees?.some(assignee => assignee.toLowerCase().includes(searchTerm.toLowerCase())) ||
         node.data.tags?.some(tag => tag.toLowerCase().includes(searchTerm.toLowerCase()))
       );
     }
@@ -124,13 +124,9 @@ const TableView: React.FC<TableViewProps> = ({
           aValue = a.data.dueDate?.getTime() || 0;
           bValue = b.data.dueDate?.getTime() || 0;
           break;
-        case 'discipline':
-          aValue = a.data.discipline || '';
-          bValue = b.data.discipline || '';
-          break;
         case 'assignees':
-          aValue = a.data.assignees?.length || 0;
-          bValue = b.data.assignees?.length || 0;
+          aValue = (a.data.assignees || []).join(' | ');
+          bValue = (b.data.assignees || []).join(' | ');
           break;
         default:
           return 0;
@@ -370,15 +366,6 @@ const TableView: React.FC<TableViewProps> = ({
               </th>
               <th 
                 className="table-header cursor-pointer hover:bg-gray-100 dark:hover:bg-slate-700"
-                onClick={() => handleSort('discipline')}
-              >
-                <div className="flex items-center gap-1">
-                  Discipline
-                  {getSortIcon('discipline')}
-                </div>
-              </th>
-              <th 
-                className="table-header cursor-pointer hover:bg-gray-100 dark:hover:bg-slate-700"
                 onClick={() => handleSort('assignees')}
               >
                 <div className="flex items-center gap-1">
@@ -445,10 +432,22 @@ const TableView: React.FC<TableViewProps> = ({
                   {formatDate(node.data.dueDate)}
                 </td>
                 <td className="table-cell">
-                  {node.data.discipline || '-'}
-                </td>
-                <td className="table-cell">
-                  {node.data.assignees?.length || 0}
+                  {node.data.assignees && node.data.assignees.length > 0 ? (
+                    <div className="flex flex-wrap gap-1">
+                      {node.data.assignees.slice(0, 3).map((assignee, index) => (
+                        <span key={index} className="text-xs bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 px-2 py-1 rounded">
+                          {assignee}
+                        </span>
+                      ))}
+                      {node.data.assignees.length > 3 && (
+                        <span className="text-xs text-gray-500 dark:text-slate-400">
+                          +{node.data.assignees.length - 3}
+                        </span>
+                      )}
+                    </div>
+                  ) : (
+                    '-'
+                  )}
                 </td>
                 <td className="table-cell">
                   {node.data.percentComplete !== undefined ? (
